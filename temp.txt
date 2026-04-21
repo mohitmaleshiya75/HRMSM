@@ -1,0 +1,209 @@
+// import {
+//     View,
+//     Text,
+//     TouchableOpacity,
+//     ActivityIndicator,
+//     Image,
+//     Alert,
+//     StyleSheet,
+// } from "react-native";
+// import { useState } from "react";
+// import * as Location from "expo-location";
+// import * as ImagePicker from "expo-image-picker";
+// import { useMutation } from "@tanstack/react-query";
+// import { api } from "@/lib/utils/apiUtils";
+// import { useTheme } from "@/provider/ThemeProvider";
+// import useCurrentUser from "@/features/auth/hooks/useCurrentUser";
+// import useLiveWorkingHours from "@/features/attendance/hooks/useCalculateWorkingHrs";
+
+// export default function AttendanceScreen() {
+//     const { isClockedOut, isLoading } = useLiveWorkingHours();
+//     const { data: user } = useCurrentUser()
+//     const type = isClockedOut ? "clockIn" : "clockOut"
+//     const theme = useTheme();
+
+//     const [step, setStep] = useState(0);
+//     const [image, setImage] = useState<string | null>(null);
+//     const [location, setLocation] = useState<any>(null);
+//     const [loading, setLoading] = useState(false);
+//     if (isLoading) {
+//         return (
+//             <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+//                 <ActivityIndicator />
+//             </View>
+//         );
+//     }
+
+//     // ✅ API mutation
+//     const { mutate, isPending } = useMutation({
+//         mutationFn: async () => {
+//             const { data } = await api.post(
+//                 type === "clockIn"
+//                     ? "/accounts/clock-in/"
+//                     : "/accounts/clock-out/",
+//                 {
+//                     image,
+//                     latitude: location?.latitude,
+//                     longitude: location?.longitude,
+//                 },
+//                 {
+//                     headers: {
+//                         Authorization: `Bearer ${user?.token}`,
+//                     },
+//                 }
+//             );
+//             return data;
+//         },
+//         onSuccess: () => {
+//             Alert.alert("Success", "Attendance marked successfully");
+//         },
+//         onError: () => {
+//             Alert.alert("Error", "Something went wrong");
+//         },
+//     });
+
+//     // 📷 Capture Image
+//     const captureImage = async () => {
+//         const permission = await ImagePicker.requestCameraPermissionsAsync();
+//         if (!permission.granted) {
+//             Alert.alert("Permission required");
+//             return;
+//         }
+
+//         const result = await ImagePicker.launchCameraAsync({
+//             quality: 0.5,
+//             base64: true,
+//         });
+
+//         if (!result.canceled) {
+//             setImage(`data:image/jpeg;base64,${result.assets[0].base64}`);
+//             setStep(1);
+//         }
+//     };
+
+//     // 📍 Get Location
+//     const getLocation = async () => {
+//         setLoading(true);
+
+//         const { status } = await Location.requestForegroundPermissionsAsync();
+//         if (status !== "granted") {
+//             Alert.alert("Permission denied");
+//             setLoading(false);
+//             return;
+//         }
+
+//         const loc = await Location.getCurrentPositionAsync({});
+//         setLocation(loc.coords);
+
+//         setLoading(false);
+//         setStep(2);
+//     };
+
+//     // ✅ Submit
+//     const handleSubmit = () => {
+//         mutate();
+//     };
+
+//     return (
+//         <View style={[styles.container, { backgroundColor: theme.background }]}>
+//             <Text style={[styles.title, { color: theme.foreground }]}>
+//                 {type === "clockIn" ? "Clock In" : "Clock Out"}
+//             </Text>
+
+//             {/* STEP 1 */}
+//             {step === 0 && (
+//                 <View style={styles.center}>
+//                     <Text style={{ color: theme.mutedForeground }}>
+//                         Capture your face
+//                     </Text>
+
+//                     <TouchableOpacity
+//                         style={[styles.button, { backgroundColor: theme.primary }]}
+//                         onPress={captureImage}
+//                     >
+//                         <Text style={styles.btnText}>Open Camera</Text>
+//                     </TouchableOpacity>
+//                 </View>
+//             )}
+
+//             {/* STEP 2 */}
+//             {step === 1 && (
+//                 <View style={styles.center}>
+//                     {image && (
+//                         <Image source={{ uri: image }} style={styles.preview} />
+//                     )}
+
+//                     <TouchableOpacity
+//                         style={[styles.button, { backgroundColor: theme.primary }]}
+//                         onPress={getLocation}
+//                     >
+//                         {loading ? (
+//                             <ActivityIndicator color="#fff" />
+//                         ) : (
+//                             <Text style={styles.btnText}>Verify Location</Text>
+//                         )}
+//                     </TouchableOpacity>
+//                 </View>
+//             )}
+
+//             {/* STEP 3 */}
+//             {step === 2 && (
+//                 <View style={styles.center}>
+//                     <Text style={{ color: theme.foreground }}>
+//                         Ready to submit
+//                     </Text>
+
+//                     <TouchableOpacity
+//                         style={[styles.button, { backgroundColor: theme.primary }]}
+//                         onPress={handleSubmit}
+//                         disabled={isPending}
+//                     >
+//                         {isPending ? (
+//                             <ActivityIndicator color="#fff" />
+//                         ) : (
+//                             <Text style={styles.btnText}>Confirm Attendance</Text>
+//                         )}
+//                     </TouchableOpacity>
+//                 </View>
+//             )}
+//         </View>
+//     );
+// }
+// const styles = StyleSheet.create({
+//     container: {
+//         flex: 1,
+//         padding: 20,
+//     },
+
+//     title: {
+//         fontSize: 22,
+//         fontWeight: "700",
+//         marginBottom: 20,
+//         textAlign: "center",
+//     },
+
+//     center: {
+//         flex: 1,
+//         justifyContent: "center",
+//         alignItems: "center",
+//         gap: 16,
+//     },
+
+//     button: {
+//         padding: 14,
+//         borderRadius: 10,
+//         width: "80%",
+//         alignItems: "center",
+//     },
+
+//     btnText: {
+//         color: "#fff",
+//         fontWeight: "600",
+//     },
+
+//     preview: {
+//         width: 150,
+//         height: 150,
+//         borderRadius: 10,
+//     },
+// });

@@ -4,12 +4,12 @@
     "slug": "HRMSM",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/hrmsmlogo.png",
     "scheme": "hrmsm",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/images/hrmsmlogo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -18,7 +18,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/hrmsmlogo.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
@@ -27,10 +27,15 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/hrmsmlogo.png"
     },
     "plugins": [
-      "expo-router"
+      [
+        "expo-router",
+        {
+          "unstable_useServerMiddleware": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
