@@ -80,13 +80,24 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="user" color={color} />,
         }}
       />
-      <Tabs.Screen
-        name="Attandance"
-        options={{
-          title: 'Attandance',
-          tabBarIcon: ({ color }) => <TabBarIcon name="user" color={color} />,
-        }}
-      />
+   <Tabs.Screen
+  name="Attendance"
+  options={{
+    title: 'Attendance',
+    tabBarIcon: ({ color }) => (
+      <TabBarIcon name="check-circle" color={color} />
+    ),
+  }}
+/>
+<Tabs.Screen
+  name="View Attendance"
+  options={{
+    title: 'View Attendance',
+    tabBarIcon: ({ color }) => (
+      <TabBarIcon name="clock-o" color={color} />
+    ),
+  }}
+/>
     </Tabs>
   );
 }
