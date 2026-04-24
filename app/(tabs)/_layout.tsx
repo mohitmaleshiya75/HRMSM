@@ -74,9 +74,16 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="two"
+        name="Profile"
         options={{
           title: 'Profile',
+          tabBarIcon: ({ color }) => <TabBarIcon name="user" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="Attandance"
+        options={{
+          title: 'Attandance',
           tabBarIcon: ({ color }) => <TabBarIcon name="user" color={color} />,
         }}
       />

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { calculateTotalWorkingTime } from "@/lib/utils/dataFormatUtils";
-import useLiveWorkingHoursForAdmin from "@/features/attendance/hooks/useLiveWorkingHoursForAdmin";
-import { AttendanceFilters } from "@/features/attendance/type";
+import { AttendanceFilters } from "../type";
+import useLiveWorkingHoursForAdmin from "./useliveworkinghoursforadmin";
 const useLiveWorkingHours = (filtersProps?: AttendanceFilters) => {
   const { attendance, isLoading } = useLiveWorkingHoursForAdmin(filtersProps);
   const [totalWorkingTime, setTotalWorkingTime] = useState<string>("0h 0m 0s");
