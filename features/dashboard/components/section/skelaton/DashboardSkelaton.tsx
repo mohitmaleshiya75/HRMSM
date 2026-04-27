@@ -1,61 +1,51 @@
 import React from "react";
-import { View, StyleSheet } from "react-native";
-import SkeletonPlaceholder from "react-native-skeleton-placeholder";
+import { View, StyleSheet, Dimensions } from "react-native";
+import SkeletonContent from "react-native-skeleton-content";
+
+const { width } = Dimensions.get("window");
 
 export default function DashboardSkeleton() {
   return (
-    <SkeletonPlaceholder borderRadius={12}>
-      <View style={styles.container}>
-        
-        {/* Header */}
-        <View style={styles.header} />
+    <SkeletonContent
+      containerStyle={styles.container}
+      isLoading={true}
+      layout={[
+        // Header
+        { key: "header", width: width - 32, height: 120, borderRadius: 16, marginBottom: 20 },
 
-        {/* Stats Cards */}
-        {[1, 2, 3, 4].map((_, i) => (
-          <View key={i} style={styles.statCard} />
-        ))}
+        // Stats Cards
+        ...[1, 2, 3, 4].map((_, i) => ({
+          key: `stat-${i}`,
+          width: width - 32,
+          height: 80,
+          borderRadius: 14,
+          marginBottom: 12,
+        })),
 
-        {/* Features */}
-        {[1, 2, 3, 4].map((_, i) => (
-          <View key={i} style={styles.featureCard} />
-        ))}
+        // Feature Cards
+        ...[1, 2, 3, 4].map((_, i) => ({
+          key: `feature-${i}`,
+          width: width - 32,
+          height: 70,
+          borderRadius: 14,
+          marginBottom: 12,
+        })),
 
-        {/* Big Cards */}
-        {[1, 2, 3].map((_, i) => (
-          <View key={i} style={styles.bigCard} />
-        ))}
-
-      </View>
-    </SkeletonPlaceholder>
+        // Big Cards
+        ...[1, 2, 3].map((_, i) => ({
+          key: `big-${i}`,
+          width: width - 32,
+          height: 160,
+          borderRadius: 14,
+          marginBottom: 16,
+        })),
+      ]}
+    />
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-  },
-
-  header: {
-    height: 120,
-    borderRadius: 16,
-    marginBottom: 20,
-  },
-
-  statCard: {
-    height: 80,
-    borderRadius: 14,
-    marginBottom: 12,
-  },
-
-  featureCard: {
-    height: 70,
-    borderRadius: 14,
-    marginBottom: 12,
-  },
-
-  bigCard: {
-    height: 160,
-    borderRadius: 14,
-    marginBottom: 16,
   },
 });
