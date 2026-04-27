@@ -1,13 +1,14 @@
 import useCurrentUser from "@/features/auth/hooks/useCurrentUser";
 import { api, getReadableErrorMessage } from "@/lib/utils/apiUtils";
 import { useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { LeaveBalance } from "../types";
-import useGetOfficeId from "@/hooks/useGetOfficeId";
+import { LeaveBalance } from "../type";
+// import { toast } from "sonner";
+// import { LeaveBalance } from "../types";
+// import useGetOfficeId from "@/hooks/useGetOfficeId";
 
 const useViewLeaveBalance = () => {
   const { data: user } = useCurrentUser();
-  const officeId = useGetOfficeId();
+  const officeId = user?.office;
   return useQuery<LeaveBalance[]>({
     queryKey: ["leaveBalance"],
     queryFn: async () => {
@@ -23,7 +24,7 @@ const useViewLeaveBalance = () => {
         return data;
       } catch (error) {
         const err = getReadableErrorMessage(error);
-        toast.error(err);
+        // toast.error(err);
         console.error(error);
         return [];
       }

@@ -44,19 +44,19 @@ const useLoginForm = () => {
         const { data: userInfo } = await refetch();
         await SecureStore.setItemAsync(authAccessTokenCookieName,data.access)
         await SecureStore.setItemAsync(authRefreshTokenCookieName,data.refresh)
-        if (
-          userInfo?.role === "Admin" ||
-          userInfo?.role === "HR" ||
-          userInfo?.role === "Employee" ||
-          userInfo?.role === "Manager" ||
-          userInfo?.role === "Finance"
-        ) {
-          router.replace("/(tabs)/two");
-        }
+        // if (
+        //   userInfo?.role === "Admin" ||
+        //   userInfo?.role === "HR" ||
+        //   userInfo?.role === "Employee" ||
+        //   userInfo?.role === "Manager" ||
+        //   userInfo?.role === "Finance"
+        // ) {
+          router.replace("/(tabs)");
+        // }
 
-        if (userInfo?.role === "SuperAdmin") {
-          router.replace("/(tabs)/two");
-        }   
+        // if (userInfo?.role === "SuperAdmin") {
+        //   router.replace("/(tabs)/two");
+        // }   
       } catch (e) {
         Alert.alert("Error", "Something went wrong after login");
       }

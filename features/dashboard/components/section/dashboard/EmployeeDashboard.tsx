@@ -1,24 +1,43 @@
-import React, { useCallback, useState, useEffect } from "react";
+import useGetActiveAnnouncements from "@/features/announcements/hooks/useGetActiveAnnouncements";
+import useCurrentUser from "@/features/auth/hooks/useCurrentUser";
+import useGetBirthday from "@/features/birthdays/hooks/useGetBirthdays";
+import useViewLeaveBalance from "@/features/leaves/hooks/useViewLeaveBalance";
+import useLiveWorkingHours from "@/hooks/useCalculateWorkingHrs";
+import { formateTime } from "@/lib/utils/dateUtils";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-  View,
-  Text,
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  RefreshControl,
   ScrollView,
   StyleSheet,
+  Text,
   TouchableOpacity,
-  Dimensions,
-  RefreshControl,
   useColorScheme,
-  ActivityIndicator,
+  View,
 } from "react-native";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import DashboardSkeleton from "../skelaton/DashboardSkelaton";
+import { useRouter } from "expo-router";
 
 type IonIconName = React.ComponentProps<typeof Ionicons>["name"];
 type MaterialCommunityIconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
-const { width } = Dimensions.get("window");
 
 export default function EmployeeDashboardScreen() {
+  const router = useRouter();
   const theme = useColorScheme();
+  const { data: user } = useCurrentUser();
+  const { isClockedOut, attendance, isLoading: loadingworkinghrs } = useLiveWorkingHours();
+  const { birthdays: upcomingEvents, isLoading: LoadingBirthday } = useGetBirthday();
+  const { data: announcements, isLoading: LoadingAnnouncements } = useGetActiveAnnouncements();
+  const { data, isLoading: LoadingBalance } = useViewLeaveBalance();
+
+  const leaveBalance = data?.reduce((total, leave) => {
+    return total + (leave.monthly_allocation || 0);
+  }, 0);
+
   const isDark = theme === "dark";
 
   const [refreshing, setRefreshing] = useState(false);
@@ -35,6 +54,10 @@ export default function EmployeeDashboardScreen() {
     setTimeout(() => setRefreshing(false), 1500);
   }, []);
 
+  if (isLoading && loadingworkinghrs && LoadingAnnouncements && LoadingBirthday) {
+    <DashboardSkeleton />
+  }
+
   const getFormattedDate = () => {
     return new Date().toLocaleDateString("en-US", {
       weekday: "long",
@@ -42,6 +65,9 @@ export default function EmployeeDashboardScreen() {
       day: "numeric",
     });
   };
+
+  const clockin = (attendance.length > 0 && attendance[0].clock_in_time) ? true : false;
+  // console.log(clockin)
 
   // Stat cards for employee
   const statCards: Array<{
@@ -51,114 +77,118 @@ export default function EmployeeDashboardScreen() {
     color: string;
     subtext: string;
   }> = [
-    {
-      title: "Attendance Status",
-      value: "Present",
-      icon: "checkmark-circle-outline",
-      color: "#10b981",
-      subtext: "Clocked in at 9:00 AM",
-    },
-    {
-      title: "Pending Tasks",
-      value: "5",
-      icon: "checkmark-outline",
-      color: "#3b82f6",
-      subtext: "3 due today",
-    },
-    {
-      title: "Leave Balance",
-      value: "12",
-      icon: "calendar-outline",
-      color: "#f59e0b",
-      subtext: "Days remaining",
-    },
-    {
-      title: "Performance",
-      value: "8.5/10",
-      icon: "star-outline",
-      color: "#8b5cf6",
-      subtext: "Overall score",
-    },
-  ];
+      {
+        title: "Attendance Status",
+        value: clockin ? "Present" : "Absent",
+        icon: "checkmark-circle-outline",
+        color: "#10b981",
+        subtext: clockin ? formateTime(attendance[0].clock_in_time || new Date()) : "Not Clocked in yet",
+      },
+      // {
+      //   title: "Pending Tasks",
+      //   value: "5",
+      //   icon: "checkmark-outline",
+      //   color: "#3b82f6",
+      //   subtext: "3 due today",
+      // },
+      {
+        title: "Leave Balance",
+        value: String(leaveBalance) || "0",
+        icon: "calendar-outline",
+        color: "#f59e0b",
+        subtext: "Days remaining",
+      },
+      // {
+      //   title: "Performance",
+      //   value: "8.5/10",
+      //   icon: "star-outline",
+      //   color: "#8b5cf6",
+      //   subtext: "Overall score",
+      // },
+    ];
 
   // Quick actions for employee
   const quickActions: Array<{
     title: string;
     description: string;
     icon: MaterialCommunityIconName;
+    link: string;
   }> = [
-    {
-      title: "Mark Attendance",
-      description: "Check in or check out",
-      icon: "clock-outline",
-    },
-    {
-      title: "Request Leave",
-      description: "Apply for time off",
-      icon: "calendar-clock-outline",
-    },
-    {
-      title: "My Tasks",
-      description: "View assigned tasks",
-      icon: "checkbox-marked-circle-outline",
-    },
-    {
-      title: "My Performance",
-      description: "View reviews and ratings",
-      icon: "chart-box-outline",
-    },
-    {
-      title: "Payslip",
-      description: "Download your payslip",
-      icon: "file-document-outline",
-    },
-    {
-      title: "Support",
-      description: "Contact HR support",
-      icon: "file-document-outline",
-    },
-  ];
+      {
+        title: "Mark Attendance",
+        description: "Check in or check out",
+        icon: "clock-outline",
+        link: "/(tabs)/Attendance"
+      },
+      {
+        title: "Leave Requests",
+        description: "Apply for time off",
+        icon: "calendar-clock-outline",
+        link: "/(tabs)/Leaves"
+      },
+      // {
+      //   title: "My Tasks",
+      //   description: "View assigned tasks",  
+      //   icon: "checkbox-marked-circle-outline",
+      // },
+      // {
+      //   title: "My Performance",
+      //   description: "View reviews and ratings",
+      //   icon: "chart-box-outline",
+      // },
+      {
+        title: "Profile",
+        description: "Visit your profile",
+        icon: "account",
+        link: "/(tabs)/Profile"
+      },
+      // {
+      //   title: "Support",
+      //   description: "Contact HR support",
+      //   icon: "file-document-outline",
+      // },
+    ];
 
   // Upcoming events for employee
-  const upcomingEvents: Array<{
-    title: string;
-    date: string;
-    type: "meeting" | "deadline" | "review";
-    icon: IonIconName;
-  }> = [
-    {
-      title: "Team Meeting",
-      date: "Today at 2:00 PM",
-      type: "meeting",
-      icon: "people-outline",
-    },
-    {
-      title: "Project Deadline",
-      date: "Tomorrow",
-      type: "deadline",
-      icon: "flag-outline",
-    },
-    {
-      title: "Performance Review",
-      date: "This Friday",
-      type: "review",
-      icon: "checkmark-circle-outline",
-    },
-  ];
+  // const upcomingEvents: Array<{
+  //   title: string;
+  //   date: string;
+  //   type: "meeting" | "deadline" | "review";
+  //   icon: IonIconName;
+  // }> = [
+  //     {
+  //       title: "Team Meeting",
+  //       date: "Today at 2:00 PM",
+  //       type: "meeting",
+  //       icon: "people-outline",
+  //     },
+  //     {
+  //       title: "Project Deadline",
+  //       date: "Tomorrow",
+  //       type: "deadline",
+  //       icon: "flag-outline",
+  //     },
+  //     {
+  //       title: "Performance Review",
+  //       date: "This Friday",
+  //       type: "review",
+  //       icon: "checkmark-circle-outline",
+  //     },
+  //   ];
 
   // Announcements
-  const announcements = [
-    {
-      title: "Office Hours Updated",
-      date: "2 hours ago",
-      description: "New flexible work hours policy implemented",
-    },
-    {
-      title: "Birthday Celebration",
-      date: "1 day ago",
-      description: "Join us for Sarah's birthday celebration on Friday",
-    },
-  ];
+  // const announcements = [
+  //   {
+  //     title: "Office Hours Updated",
+  //     date: "2 hours ago",
+  //     description: "New flexible work hours policy implemented",
+  //   },
+  //   {
+  //     title: "Birthday Celebration",
+  //     date: "1 day ago",
+  //     description: "Join us for Sarah's birthday celebration on Friday",
+  //   },
+  // ];
 
   if (isLoading) {
     return (
@@ -286,6 +316,7 @@ export default function EmployeeDashboardScreen() {
           <TouchableOpacity
             key={index}
             activeOpacity={0.8}
+            onPress={() => {router.replace(action.link as any)}}
             style={[
               styles.actionCard,
               {
@@ -322,7 +353,6 @@ export default function EmployeeDashboardScreen() {
         ))}
       </View>
 
-      {/* UPCOMING EVENTS */}
       <View
         style={[
           styles.bigCard,
@@ -345,11 +375,14 @@ export default function EmployeeDashboardScreen() {
               { color: isDark ? "#fff" : "#111", marginVertical: 0 },
             ]}
           >
-            Upcoming Events
+            Upcoming Birthdays
           </Text>
         </View>
 
         <View style={styles.eventsList}>
+          {upcomingEvents.length === 0 && (<Text style={[styles.eventTitle, { color: isDark ? "#fff" : "#111" }]}>
+            {"No more birthdays this month"}
+          </Text>)}
           {upcomingEvents.map((event, index) => (
             <View
               key={index}
@@ -362,28 +395,29 @@ export default function EmployeeDashboardScreen() {
               ]}
             >
               <View style={styles.eventIcon}>
-                <Ionicons
-                  name={event.icon}
-                  size={20}
-                  color="#10b981"
+                <Image
+                  src={user?.profile_image_url}
+                  height={20}
+                  width={20}
+                // color="#10b981"
                 />
               </View>
               <View style={styles.eventContent}>
                 <Text style={[styles.eventTitle, { color: isDark ? "#fff" : "#111" }]}>
-                  {event.title}
+                  {event.first_name}{" "}{event.last_name}
                 </Text>
                 <Text style={[styles.eventDate, { color: isDark ? "#9ca3af" : "#6b7280" }]}>
-                  {event.date}
+                  {event.date_of_birth}
                 </Text>
               </View>
-              <View
+              {/* <View
                 style={[
                   styles.eventTypeBadge,
                   {
-                    backgroundColor: 
+                    backgroundColor:
                       event.type === "meeting" ? "#dbeafe" :
-                      event.type === "deadline" ? "#fecaca" :
-                      "#e0e7ff",
+                        event.type === "deadline" ? "#fecaca" :
+                          "#e0e7ff",
                   },
                 ]}
               >
@@ -393,19 +427,18 @@ export default function EmployeeDashboardScreen() {
                     {
                       color:
                         event.type === "meeting" ? "#0284c7" :
-                        event.type === "deadline" ? "#dc2626" :
-                        "#4338ca",
+                          event.type === "deadline" ? "#dc2626" :
+                            "#4338ca",
                     },
                   ]}
                 >
                   {event.type}
                 </Text>
-              </View>
+              </View> */}
             </View>
           ))}
         </View>
       </View>
-
       {/* ANNOUNCEMENTS */}
       <View
         style={[
@@ -434,7 +467,10 @@ export default function EmployeeDashboardScreen() {
         </View>
 
         <View style={styles.announcementsList}>
-          {announcements.map((announcement, index) => (
+          {(announcements?.length === 0 || announcements === undefined) && (<Text style={[styles.eventTitle, { color: isDark ? "#fff" : "#111" }]}>
+            No announcements yet
+          </Text>)}
+          {announcements?.map((announcement, index) => (
             <View
               key={index}
               style={[
@@ -457,10 +493,10 @@ export default function EmployeeDashboardScreen() {
                   {announcement.title}
                 </Text>
                 <Text style={[styles.announcementDesc, { color: isDark ? "#9ca3af" : "#6b7280" }]}>
-                  {announcement.description}
+                  {announcement.message}
                 </Text>
                 <Text style={[styles.announcementTime, { color: isDark ? "#6b7280" : "#9ca3af" }]}>
-                  {announcement.date}
+                  {announcement.created_by_name}
                 </Text>
               </View>
             </View>
@@ -468,8 +504,9 @@ export default function EmployeeDashboardScreen() {
         </View>
       </View>
 
+
       {/* WORK SUMMARY SECTION */}
-      <View
+      {/* <View
         style={[
           styles.bigCard,
           {
@@ -496,7 +533,6 @@ export default function EmployeeDashboardScreen() {
         </View>
 
         <View style={styles.summaryGrid}>
-          {/* Completed Tasks */}
           <View style={styles.summaryItem}>
             <View style={styles.summaryIconContainer}>
               <Ionicons name="checkmark-done-outline" size={24} color="#10b981" />
@@ -509,7 +545,6 @@ export default function EmployeeDashboardScreen() {
             </Text>
           </View>
 
-          {/* Hours Logged */}
           <View style={styles.summaryItem}>
             <View style={styles.summaryIconContainer}>
               <Ionicons name="time-outline" size={24} color="#3b82f6" />
@@ -522,7 +557,6 @@ export default function EmployeeDashboardScreen() {
             </Text>
           </View>
 
-          {/* Projects */}
           <View style={styles.summaryItem}>
             <View style={styles.summaryIconContainer}>
               <Ionicons name="briefcase-outline" size={24} color="#f59e0b" />
@@ -535,10 +569,10 @@ export default function EmployeeDashboardScreen() {
             </Text>
           </View>
         </View>
-      </View>
+      </View> */}
 
       {/* RECENT ACTIVITIES */}
-      <View
+      {/* <View
         style={[
           styles.bigCard,
           {
@@ -576,7 +610,7 @@ export default function EmployeeDashboardScreen() {
                 },
               ]}
             >
-              <View
+            <View
                 style={[
                   styles.activityDot,
                   { backgroundColor: "#10b981" },
@@ -593,7 +627,7 @@ export default function EmployeeDashboardScreen() {
             </View>
           ))}
         </View>
-      </View>
+      </View> */}
 
       {/* Bottom padding */}
       <View style={{ height: 20 }} />
