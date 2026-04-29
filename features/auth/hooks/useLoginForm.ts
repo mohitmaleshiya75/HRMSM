@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import * as SecureStore from "expo-secure-store";
 import { Alert } from "react-native";
 import { useRouter } from "expo-router";
+import { syncToken } from '@/services/usePushNotifications';
 
 import { LoginRequest, LoginResponse200 } from "../types";
 import { api, getReadableErrorMessage } from "@/lib/utils/apiUtils";
@@ -52,6 +53,7 @@ const useLoginForm = () => {
         //   userInfo?.role === "Finance"
         // ) {
           router.replace("/(tabs)");
+          await syncToken();
         // }
 
         // if (userInfo?.role === "SuperAdmin") {

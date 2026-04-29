@@ -102,6 +102,17 @@ export default function TabLayout() {
     ),
   }}
 />
+
+<Tabs.Screen
+  name="Chats"
+  options={{
+    title: 'Chats',
+    headerShown: false,
+    tabBarIcon: ({ color }) => (
+      <TabBarIcon name="comments" color={color} />
+    ),
+  }}
+/>
  <Tabs.Screen
         name="Profile"
         options={{

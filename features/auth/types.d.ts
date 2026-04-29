@@ -49,6 +49,7 @@ export type User = {
   esic_number: string;
   bank_account_number: string;
   ifsc_code: string;
+  token: string|null;
   bank_name: string;
   marital_status: string;
   emergency_number: string;

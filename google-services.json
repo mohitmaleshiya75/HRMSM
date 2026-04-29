@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "843737322652",
+    "project_id": "hrmsm-fdab5",
+    "storage_bucket": "hrmsm-fdab5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:843737322652:android:307519e4f8984e01ce8959",
+        "android_client_info": {
+          "package_name": "com.hrmsm.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAInDfkISLZJDNYOPYjGoiGIUMqWDGA2Hc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

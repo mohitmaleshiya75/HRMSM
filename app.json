@@ -8,13 +8,16 @@
     "scheme": "hrmsm",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "softwareKeyboardLayoutMode": "resize",
     "splash": {
       "image": "./assets/images/hrmsmlogo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.hrmsm.app"
+      
     },
     "android": {
       "package": "com.hrmsm.app",
@@ -24,22 +27,28 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE"
+      ]
     },
     "web": {
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/hrmsmlogo.png"
     },
-    "plugins": [
-      [
-        "expo-router",
-        {
-          "unstable_useServerMiddleware": true
-        }
-      ],
-      "expo-secure-store"
-    ],
+  "plugins": [
+  [
+    "expo-router",
+    { "unstable_useServerMiddleware": true }
+  ],
+  "expo-secure-store",
+  "@react-native-firebase/app",
+  "@react-native-firebase/messaging"
+],
     "experiments": {
       "typedRoutes": true
     },
