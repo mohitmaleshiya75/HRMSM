@@ -10,7 +10,7 @@ export function makeApi(token: string | null) {
       ...opts,
       headers: { ...h, ...(opts.headers as Record<string, string> || {}) },
     });
-    const isJ = res.headers.get('content-type')?.includes('application/json');
+    const isJ = res.headers.get('content-type')?.includes('application/json');                                                                                                                                                    
     const data = isJ ? await res.json().catch(() => null) : await res.text().catch(() => null);
     if (!res.ok) {
       const msg = (data && typeof data === 'object'

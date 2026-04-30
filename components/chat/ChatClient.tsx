@@ -179,7 +179,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
               }
             }
 
-            return [...prev, msg];
+            // Prepend for inverted list so it appears at the bottom
+            return [msg, ...prev];
           });
 
           if (!mine) {
@@ -199,7 +200,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
               setUnreadBottom(newCount);
             }
           } else {
-            setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+            // Scroll to offset 0 (bottom of inverted list)
+            setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 50);
           }
 
           setRooms(prev =>
@@ -412,7 +414,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
         const data = await api.listMessages(rid);
         const list = normalizeList<Message>(data);
 
-        setMessages(list);
+        // Reverse list because API is usually oldest -> newest, but UI needs newest at index 0
+        setMessages([...list].reverse());
         setSearchResults(null);
         setUnreadMap(prev => ({ ...prev, [String(rid)]: 0 }));
         setUnreadBottom(0);
@@ -431,7 +434,7 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
 
         if (scrollBottom && !silent) {
           setTimeout(
-            () => flatListRef.current?.scrollToEnd({ animated: false }),
+            () => flatListRef.current?.scrollToOffset({ offset: 0, animated: false }),
             100
           );
         }
@@ -518,45 +521,62 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
   // ── Send message ──────────────────────────────────────────────────────────
   const sendMessage = useCallback(async () => {
     const rid = currentRoomId;
-    if (!rid) return;
+    console.log('[ChatDebug] sendMessage triggered. RoomID:', rid);
+    if (!rid) {
+      console.warn('[ChatDebug] Aborting send: No currentRoomId');
+      return;
+    }
 
-    const text = drafts.trim();
+  const text = (drafts[String(rid)] || '').trim();
+    console.log('[ChatDebug] Message text:', text);
     if (!text) return;
 
     const prevReply = replyTo;
-    setDrafts('');
+    setDrafts(prev => ({ ...prev, [String(rid)]: '' }));
     setReplyTo(null);
 
     LayoutAnimation.configureNext(LayoutAnimation.Presets.spring);
 
     const tempId = `temp-${Date.now()}`;
+    const optimisticMsg: Message = {
+      id: tempId,
+      sender: {
+        ...currentUser,
+        full_name: empName(currentUser as any),
+      } as unknown as Employee,
+      content: text,
+      message_type: 'text',
+      created_at: new Date().toISOString(),
+      status: 'sending',
+      isPending: true,
+      reply_to: prevReply || null,
+      room: rid,
+    };
+
     setMessages(prev => [
+      optimisticMsg,
       ...prev,
-      {
-        id: tempId,
-        sender: currentUser as unknown as Employee,
-        content: text,
-        message_type: 'text',
-        created_at: new Date().toISOString(),
-        status: 'sending',
-        isPending: true,
-        reply_to: prevReply || null,
-        room: rid,
-      },
     ]);
 
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 20);
+    setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 20);
 
     const sent = wsSend({
       type: 'send_message',
+      room_id: rid,
       content: text,
       reply_to_id: prevReply ? msgId(prevReply) : null,
     });
 
+    console.log('[ChatDebug] wsSend response:', sent);
+
     if (!sent) {
+      console.error('[ChatDebug] Failed to send via WebSocket (Socket not open)');
       setError('Reconnecting… please wait.');
+        setTimeout(() => {
+    setError(null); // or setError('') depending on your initial state
+  }, 3000);
       setMessages(prev => prev.filter(m => m.id !== tempId));
-      setDrafts(prev => ({ ...prev, [String(rid)]: text }));
+      setDrafts(prev => ({ ...prev, [String(rid)]: text })); 
       setReplyTo(prevReply);
     }
   }, [currentRoomId, currentUser, drafts, replyTo, wsSend]);
@@ -1173,7 +1193,7 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
 
         <KeyboardAvoidingView
           style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 115 : 0}
         >
           <View style={styles.flex}>
@@ -1200,7 +1220,7 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
               unreadBottom={unreadBottom}
               flatListRef={flatListRef}
               onScrollToBottom={() => {
-                flatListRef.current?.scrollToEnd({ animated: true });
+                flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
                 setUnreadBottom(0);
               }}
               onEdit={handleEdit}

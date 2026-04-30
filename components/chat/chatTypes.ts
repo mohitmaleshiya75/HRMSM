@@ -66,14 +66,39 @@ export type Notification = {
 };
 
 // Config
-export const SERVER_BASE = process.env.EXPO_PUBLIC_SERVER_BACKEND_URL || "http://localhost:8000";
-export const ACCOUNTS_API = `${SERVER_BASE}/accounts`;
-export const WS_BASE = SERVER_BASE.replace('https://', 'wss://').replace('http://', 'ws://') + '/ws/chat';
-export const CLOUDINARY_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_PRESET || 'ml_default';
-export const CLOUDINARY_CLOUD = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD || 'your_cloud_name';
+// Config
+export const SERVER_BASE =
+  process.env.EXPO_PUBLIC_SERVER_BACKEND_URL || "https://hrmsm.com/api";
+
+export const CHAT_BASE =
+  process.env.EXPO_PUBLIC_CHAT_BACKEND_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "https://hrmsm.com";
+
+export const ACCOUNTS_API = `${SERVER_BASE.replace(/\/+$/, "")}/accounts`;
+
+const toWsBase = (url: string) => {
+  const clean = url.replace(/\/+$/, "");
+  if (clean.startsWith("https://")) return clean.replace("https://", "wss://");
+  if (clean.startsWith("http://")) return clean.replace("http://", "ws://");
+  if (clean.startsWith("wss://") || clean.startsWith("ws://")) return clean;
+  return clean;
+};
+
+export const WS_BASE = toWsBase(CHAT_BASE);
+
+export const buildChatWsUrl = (roomId: Id, token: string) => {
+  return `${WS_BASE.replace(/\/+$/, "")}/ws/chat/${roomId}/?token=${encodeURIComponent(
+    token,
+  )}`;
+};
+
+export const CLOUDINARY_PRESET =
+  process.env.EXPO_PUBLIC_CLOUDINARY_PRESET || "ml_default";
+export const CLOUDINARY_CLOUD =
+  process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD || "your_cloud_name";
 export const EDIT_TIME_LIMIT_MS = 15 * 60 * 1000;
 export const MAX_MESSAGE_LENGTH = 1000;
-
 // ID / Name helpers
 export const empId = (e?: Employee | CurrentUser | null): Id | null =>
   (e as Employee)?.id ?? (e as Employee)?.employee_id ?? (e as Employee)?.user_id ?? (e as Employee)?.pk ?? null;

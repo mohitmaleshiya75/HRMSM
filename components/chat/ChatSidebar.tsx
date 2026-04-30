@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: Colors.overlay },
   sidebar: { flex: 1, width: SIDEBAR_WIDTH, backgroundColor: Colors.white, flexDirection: 'column' },
   sidebarInline: { width: '100%', flex: 1 },
-  header: { backgroundColor: Colors.headerBg, paddingTop: 10, paddingBottom: 12, paddingHorizontal: 16 },
+  header: { backgroundColor: Colors.headerBg, paddingTop: 40, paddingBottom: 12, paddingHorizontal: 16 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerTitle: { color: Colors.white, fontWeight: '700', fontSize: 17, marginLeft: 8 },

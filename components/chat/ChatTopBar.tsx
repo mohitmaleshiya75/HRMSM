@@ -186,7 +186,7 @@ export default function ChatTopBar({
 
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: Colors.headerBg, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 5, zIndex: 10 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 10, gap: 4,paddingTop: 10   },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 10, gap: 4,paddingTop: 40   },
   backBtn: { padding: 8 },
   roomInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 },
   roomText: { flex: 1, minWidth: 0 },

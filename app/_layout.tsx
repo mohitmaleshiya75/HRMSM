@@ -6,8 +6,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { Alert } from 'react-native';
 import 'react-native-reanimated';
-import messaging from '@react-native-firebase/messaging';
-import { usePushNotifications } from '@/services/usePushNotifications';
+// import messaging from '@react-native-firebase/messaging';
+// import { usePushNotifications } from '@/services/usePushNotifications';
 import QueryProvider from '@/provider/QueryProvider';
 import { useColorScheme } from '@/components/useColorScheme';
 
@@ -21,7 +21,7 @@ export const unstable_settings = {
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-   usePushNotifications();
+   // usePushNotifications();
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
     ...FontAwesome.font,
@@ -31,14 +31,14 @@ export default function RootLayout() {
     if (error) throw error;
   }, [error]);
 
-  useEffect(() => {
-  messaging().getToken().then(token => {
-    console.log('====================================');
-    console.log('🔔 FCM TOKEN:');
-    console.log(token);
-    console.log('====================================');
-  });
-}, []);
+//   useEffect(() => {
+//   messaging().getToken().then(token => {
+//     console.log('====================================');
+//     console.log('🔔 FCM TOKEN:');
+//     console.log(token);
+//     console.log('====================================');
+//   });
+// }, []);
 
   useEffect(() => {
   const checkForUpdates = async () => {

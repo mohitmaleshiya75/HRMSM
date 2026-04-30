@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 6,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 30,
   },
   replyBar: {
     flexDirection: 'row',
