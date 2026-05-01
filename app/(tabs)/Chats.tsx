@@ -1,15 +1,17 @@
 // Chats.tsx  ← your existing file, now updated
 import React from 'react';
-import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ChatClient from '../../components/chat/ChatClient';
 import { Colors } from '../../components/chat/Colors';
 
 // Replace this with your actual hook
 import useCurrentUser from '@/features/auth/hooks/useCurrentUser';
+import { useUnreadMessages } from './_layout'; // Import the context hook
 
 const Chats = () => {
   const { data: currentUser, isLoading } = useCurrentUser();
+  const { setTotalUnread } = useUnreadMessages(); // Get the setter from context
 
   if (isLoading) {
     return (
@@ -34,7 +36,7 @@ const Chats = () => {
 
   return (
     <SafeAreaProvider>
-      <ChatClient currentUser={currentUser} />
+      <ChatClient currentUser={currentUser} setTotalUnread={setTotalUnread} /> {/* Pass the setter */}
     </SafeAreaProvider>
   );
 };

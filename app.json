@@ -2,7 +2,7 @@
   "expo": {
     "name": "HRMSM",
     "slug": "HRMSM",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/images/hrmsmlogo.png",
     "scheme": "hrmsm",
@@ -17,11 +17,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.hrmsm.app"
-      
     },
     "android": {
       "package": "com.hrmsm.app",
-      "versionCode": 4,
+      "versionCode": 5,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/hrmsmlogo.png",
         "backgroundColor": "#ffffff"
@@ -40,15 +39,18 @@
       "output": "static",
       "favicon": "./assets/images/hrmsmlogo.png"
     },
-  "plugins": [
-  [
-    "expo-router",
-    { "unstable_useServerMiddleware": true }
-  ],
-  "expo-secure-store",
-  "@react-native-firebase/app",
-  "@react-native-firebase/messaging"
-],
+    "plugins": [
+      [
+        "expo-router",
+        { "unstable_useServerMiddleware": true }
+      ],
+      [
+        "expo-notifications",
+        {
+          "sounds": ["./assets/sounds/notification.wav"]
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": true
     },

@@ -2,9 +2,9 @@
 // Usage: node scripts/testFCM.js
 // Paste your FCM token from Metro logs below
 
-const TOKEN = 'PASTE_YOUR_FCM_TOKEN_HERE'; // ← paste here
+const TOKEN = 'dvPEKQ8aTz-Vjcx67ztBYd:APA91bGumj8CPbaWpJCdzSZD1iUEu64JAF6_Q_En-bAWthUiwah5aR5ptQ6VSsX-blipFIJXm2kvMYxFas24wvgjQQlz61nRRiZkMPDLX2g6dteSlLQXtmk'; // ← paste here
 
-const SERVICE_ACCOUNT = require('../serviceAccountKey.json'); // adjust path
+const SERVICE_ACCOUNT = require('./hrmsm-fdab5-firebase-adminsdk-fbsvc-98157862c0.json'); // adjust path
 
 const { GoogleAuth } = require('google-auth-library');
 

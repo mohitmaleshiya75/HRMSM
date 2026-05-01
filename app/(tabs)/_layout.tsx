@@ -1,14 +1,37 @@
-import React from 'react';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Link, Tabs } from 'expo-router';
-import { Pressable } from 'react-native';
-import { Stack, Redirect } from "expo-router";
-import { useEffect, useState } from "react";
-import * as SecureStore from "expo-secure-store";
-import Colors from '@/constant/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
-import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 import { authAccessTokenCookieName } from '@/constant';
+import Colors from '@/constant/Colors';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { Redirect, Tabs } from 'expo-router';
+import * as SecureStore from "expo-secure-store";
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native'; // Added View, Text, StyleSheet
+
+// --- UnreadMessagesContext ---
+interface UnreadMessagesContextType {
+  totalUnread: number;
+  setTotalUnread: (count: number) => void;
+}
+
+const UnreadMessagesContext = createContext<UnreadMessagesContextType | undefined>(undefined);
+
+export function useUnreadMessages() {
+  const context = useContext(UnreadMessagesContext);
+  if (context === undefined) {
+    throw new Error('useUnreadMessages must be used within an UnreadMessagesProvider');
+  }
+  return context;
+}
+
+function UnreadMessagesProvider({ children }: { children: React.ReactNode }) {
+  const [totalUnread, setTotalUnread] = useState(0);
+  return (
+    <UnreadMessagesContext.Provider value={{ totalUnread, setTotalUnread }}>
+      {children}
+    </UnreadMessagesContext.Provider>
+  );
+}
+// --- End UnreadMessagesContext ---
 
 // You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
 function TabBarIcon(props: {
@@ -17,6 +40,38 @@ function TabBarIcon(props: {
 }) {
   return <FontAwesome size={28} style={{ marginBottom: -3 }} {...props} />;
 }
+
+// Badge component for the tab icon
+function TabBadge({ count, color }: { count: number; color: string }) {
+  if (count === 0) return null;
+  return (
+    <View style={[styles.badgeContainer, { backgroundColor: color }]}>
+      <Text style={styles.badgeText}>{count > 99 ? '99+' : count}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  badgeContainer: {
+    position: 'absolute',
+    right: -6,
+    top: -3,
+    borderRadius: 9,
+    width: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  badgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+});
+
+
+
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -45,12 +100,14 @@ export default function TabLayout() {
     return <Redirect href="/auth/login/page" />;
   }
   return (
+    <UnreadMessagesProvider>
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         // Disable the static render of the header on web
         // to prevent a hydration error in React Navigation v6.
         // headerShown: useClientOnlyValue(false, true),
+        //lazy: true, // Enable lazy loading of screens
       }}>
       <Tabs.Screen
         name="index"
@@ -108,9 +165,15 @@ export default function TabLayout() {
   options={{
     title: 'Chats',
     headerShown: false,
-    tabBarIcon: ({ color }) => (
-      <TabBarIcon name="comments" color={color} />
-    ),
+    tabBarIcon: ({ color }) => {
+      const { totalUnread } = useUnreadMessages();
+      return (
+        <View>
+          <TabBarIcon name="comments" color={color} />
+          <TabBadge count={totalUnread} color="red" />
+        </View>
+      );
+    },
   }}
 />
  <Tabs.Screen
@@ -121,5 +184,6 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+    </UnreadMessagesProvider>
   );
 }

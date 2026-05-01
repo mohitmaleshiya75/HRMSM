@@ -58,7 +58,7 @@ import {
 } from './ChatModals';
 import { User } from '@/features/auth/types';
 
-export default function ChatClient({ currentUser }: { currentUser: User }) {
+export default function ChatClient({ currentUser, setTotalUnread }: { currentUser: User, setTotalUnread: (count: number) => void }) {
   const token = useMemo(() => currentUser.token as string, [currentUser.token]);
 
   const meId = useMemo<Id | null>(() => {
@@ -150,6 +150,12 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
     [selectedRoom?.id, selectedRoom?.room_id]
   );
   currentRoomIdRef.current = currentRoomId;
+
+  // --- Update total unread count for the tab badge ---
+  useEffect(() => {
+    const total = Object.values(unreadMap).reduce((sum, count) => sum + count, 0);
+    setTotalUnread(total);
+  }, [unreadMap, setTotalUnread]);
 
   // ── WS Event Handler ───────────────────────────────────────────────────────
   const handleWsEvent = useCallback(
@@ -439,7 +445,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
           );
         }
       } catch (e) {
-        if (!silent) setError((e as Error).message);
+        if (!silent)           setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
       } finally {
         setLoadingMsgs(false);
         loadingMsgsRef.current = false;
@@ -474,7 +481,9 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
           setSelectedRoom(room);
           await loadMessages(rid);
         } catch (e) {
-          setError((e as Error).message);
+          setTimeout(() => setError((e as Error).message), 3000);
+          //           setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
         }
         return;
       }
@@ -501,7 +510,9 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
           await loadMessages(rid);
         }
       } catch (e) {
-        setError((e as Error).message);
+          setTimeout(() => setError((e as Error).message), 3000);
+          //           setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
       }
     },
     [api, loadMessages, loadRooms, meId]
@@ -602,7 +613,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
               )
             );
           } catch (e) {
-            setError((e as Error).message);
+                      setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
           }
         },
         'plain-text',
@@ -626,7 +638,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
             )
           );
         } catch (e) {
-          setError((e as Error).message);
+                    setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
         }
       });
     },
@@ -651,7 +664,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
         setSelectedMsgs(new Set());
         setSelectMode(false);
       } catch (e) {
-        setError((e as Error).message);
+                  setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
       }
     });
   }, [api, currentRoomId, selectedMsgs]);
@@ -668,7 +682,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
         if (mine && mine.emoji === emoji) await api.removeReaction(id);
         else await api.react(id, { emoji });
       } catch (e) {
-        setError((e as Error).message);
+                  setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
       }
     },
     [api, meId]
@@ -696,7 +711,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
           )
         );
       } catch (e) {
-        setError((e as Error).message);
+                  setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
       }
     },
     [api]
@@ -721,7 +737,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
         await api.forwardMessage(id, { room_ids: roomIds.map(Number) });
         setFwdMsg(null);
       } catch (e) {
-        setError((e as Error).message);
+                  setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
       }
     },
     [api, fwdMsg]
@@ -736,7 +753,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
         const data = await api.receipts(id);
         setReceiptsData(Array.isArray(data) ? data : []);
       } catch (e) {
-        setError((e as Error).message);
+                  setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
       }
     },
     [api]
@@ -751,7 +769,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
         const data = await api.editHistory(id);
         setHistoryData(normalizeList(data));
       } catch (e) {
-        setError((e as Error).message);
+                  setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
       }
     },
     [api]
@@ -797,7 +816,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
           await loadMessages(rid);
         }
       } catch (e) {
-        setError((e as Error).message);
+                  setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
       }
     },
     [api, loadRooms, loadMessages]
@@ -815,7 +835,9 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
         const fresh = await api.getRoom(currentRoomId);
         setSelectedRoom(fresh);
       } catch (e) {
-        setError((e as Error).message);
+          setTimeout(() => setError((e as Error).message), 3000);
+          //           setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
       }
     },
     [api, currentRoomId]
@@ -832,7 +854,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
         const fresh = await api.getRoom(currentRoomId);
         setSelectedRoom(fresh);
       } catch (e) {
-        setError((e as Error).message);
+                  setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
       }
     },
     [api, currentRoomId]
@@ -850,7 +873,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
         const fresh = await api.getRoom(currentRoomId);
         setSelectedRoom(fresh);
       } catch (e) {
-        setError((e as Error).message);
+                  setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
       }
     },
     [api, currentRoomId]
@@ -867,7 +891,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
         const fresh = await api.getRoom(currentRoomId);
         setSelectedRoom(fresh);
       } catch (e) {
-        setError((e as Error).message);
+                  setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
       }
     },
     [api, currentRoomId]
@@ -889,7 +914,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
           )
         );
       } catch (e) {
-        setError((e as Error).message);
+                  setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
       }
     },
     [api, currentRoomId]
@@ -905,7 +931,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
       setShowDetail(false);
       await loadRooms();
     } catch (e) {
-      setError((e as Error).message);
+                setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
     }
   }, [api, currentRoomId, loadRooms]);
 
@@ -917,7 +944,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
         await api.clearChat(currentRoomId);
         setMessages([]);
       } catch (e) {
-        setError((e as Error).message);
+                  setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
       }
     });
   }, [api, currentRoomId]);
@@ -943,7 +971,8 @@ export default function ChatClient({ currentUser }: { currentUser: User }) {
       const data = await api.searchMessages(rid, q);
       setSearchResults(normalizeList<Message>(data));
     } catch (e) {
-      setError((e as Error).message);
+                setTimeout(() => setError((e as Error).message), 3000);
+          // setError((e as Error).message);
     }
   }, [api, chatSearch, currentRoomId]);
 
