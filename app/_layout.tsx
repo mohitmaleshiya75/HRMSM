@@ -30,23 +30,16 @@ export default function RootLayout() {
     if (error) throw error;
   }, [error]);
 
-  // ─── Check + Request Notification Permission ──────────────────────────────
   useEffect(() => {
     async function checkPermission() {
       const { status } = await Notifications.getPermissionsAsync();
-      console.log('[Permission] Current status:', status);
 
-      if (status === 'granted') {
-        console.log('[Permission] Already granted ✅');
-        return;
-      }
+      if (status === 'granted') return;
 
       if (status === 'denied') {
-        // Already denied before — Android won't show dialog again
-        // Send user to settings manually
         Alert.alert(
           '🔔 Enable Notifications',
-          'Notifications are disabled. Please enable them in Settings to receive chat messages.',
+          'Please enable notifications in Settings to receive chat messages.',
           [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Open Settings', onPress: () => Linking.openSettings() },
@@ -55,14 +48,12 @@ export default function RootLayout() {
         return;
       }
 
-      // Status is 'undetermined' — show the dialog
+      // undetermined — show system dialog
       const { status: newStatus } = await Notifications.requestPermissionsAsync();
-      console.log('[Permission] After request:', newStatus);
-
       if (newStatus !== 'granted') {
         Alert.alert(
           '🔔 Notifications Disabled',
-          'You will not receive chat notifications. You can enable them in Settings.',
+          'You will not receive chat notifications.',
           [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Open Settings', onPress: () => Linking.openSettings() },
@@ -70,11 +61,9 @@ export default function RootLayout() {
         );
       }
     }
-
     checkPermission();
   }, []);
 
-  // ─── OTA Updates ──────────────────────────────────────────────────────────
   useEffect(() => {
     const checkForUpdates = async () => {
       try {
@@ -91,7 +80,7 @@ export default function RootLayout() {
           );
         }
       } catch (err) {
-        console.log('OTA update failed:', err);
+        // OTA not supported in Expo Go — safe to ignore
       }
     };
     checkForUpdates();
@@ -108,8 +97,6 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
-
-  // ✅ Hook called here — inside a component, after fonts load
   usePushNotifications();
 
   return (
@@ -119,7 +106,6 @@ function RootLayoutNav() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
           <Stack.Screen name="auth/login/page" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)/Chats" options={{ headerShown: false }} />
         </Stack>
       </QueryProvider>
     </ThemeProvider>

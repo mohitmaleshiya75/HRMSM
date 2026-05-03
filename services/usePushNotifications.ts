@@ -26,21 +26,17 @@ export function usePushNotifications() {
   }, []);
 
   async function init() {
-    // 1. Create channel + iOS categories
     await createNotificationChannel();
     await setupIOSCategories();
 
-    // 2. Request permission
     const allowed = await requestUserPermission();
     if (!allowed) {
       console.warn('[Push] Notification permission denied');
       return;
     }
 
-    // 3. Register FCM token with backend
     await syncToken();
 
-    // 4. FOREGROUND messages → show via expo-notifications
     const foregroundSub = Notifications.addNotificationReceivedListener(async (notification) => {
       const data = notification.request.content.data;
 
@@ -53,16 +49,14 @@ export function usePushNotifications() {
 
       if (!roomId) return;
 
-      await displayChatNotification({ title, body, roomId, messageId, roomName, avatarUri });
+      await displayChatNotification({ title, body, roomId, messageId, roomName });
     });
 
-    // 5. App in BACKGROUND/KILLED → user taps notification
     const lastResponse = await Notifications.getLastNotificationResponseAsync();
     if (lastResponse?.notification.request.content.data?.room_id) {
       navigateToRoom(lastResponse.notification.request.content.data.room_id as string);
     }
 
-    // 6. Notifee-style handlers (tap / mark as read)
     const unsubNotifee = registerNotifeeHandlers({
       onMarkRead: async (roomId, messageId) => {
         try {
@@ -93,9 +87,11 @@ export function usePushNotifications() {
 
 export async function syncToken() {
   try {
-    // Gets native FCM token (actual Firebase token) on Android
-    const deviceToken = await Notifications.getDevicePushTokenAsync();
-    const fcmToken = deviceToken.data as string;
+    // ✅ Always use getExpoPushTokenAsync — works in Expo Go AND production builds
+    const expoToken = await Notifications.getExpoPushTokenAsync({
+      projectId: 'bf36ef80-b827-421a-bee4-e9071b8a039a'
+    });
+    const fcmToken = expoToken.data; // ExponentPushToken[...]
 
     const accessToken = await SecureStore.getItemAsync('accessToken');
     if (!accessToken) return;
@@ -104,7 +100,7 @@ export async function syncToken() {
     await api.registerFCMToken(fcmToken, Platform.OS as 'android' | 'ios');
     await SecureStore.setItemAsync('fcmToken', fcmToken);
 
-    console.log('[Push] FCM token synced:', fcmToken); // ← you'll see this in console
+    console.log('[Push] Expo token synced:', fcmToken);
   } catch (e) {
     console.error('[Push] syncToken error:', e);
   }
@@ -120,7 +116,7 @@ export async function unregisterPushToken() {
     await api.unregisterFCMToken(fcmToken);
     await SecureStore.deleteItemAsync('fcmToken');
 
-    console.log('[Push] FCM token unregistered');
+    console.log('[Push] Expo token unregistered');
   } catch (e) {
     console.error('[Push] unregisterPushToken error:', e);
   }
