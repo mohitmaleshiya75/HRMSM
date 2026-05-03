@@ -2,7 +2,7 @@
   "expo": {
     "name": "HRMSM",
     "slug": "HRMSM",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/images/hrmsmlogo.png",
     "scheme": "hrmsm",
@@ -20,7 +20,7 @@
     },
     "android": {
       "package": "com.hrmsm.app",
-      "versionCode": 5,
+      "versionCode": 6,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/hrmsmlogo.png",
         "backgroundColor": "#ffffff"
