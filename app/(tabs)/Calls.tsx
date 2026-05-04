@@ -9,30 +9,62 @@ let mediaDevices: any;
 let RTCView: any;
 let _PC: any, _SDP: any, _ICE: any, _MS: any;
 
+console.log('[Calls:BOOT] ═══ Module loading — top of file ═══');
+console.log('[Calls:BOOT] Platform check starting…');
+
 try {
+  console.log('[Calls:BOOT] Attempting require("react-native-webrtc")…');
   const webrtc = require('react-native-webrtc');
+  console.log('[Calls:BOOT] react-native-webrtc loaded. Keys:', Object.keys(webrtc).join(', '));
   mediaDevices = webrtc.mediaDevices;
   RTCView      = webrtc.RTCView;
   _PC          = webrtc.RTCPeerConnection;
   _SDP         = webrtc.RTCSessionDescription;
   _ICE         = webrtc.RTCIceCandidate;
   _MS          = webrtc.MediaStream;
-} catch (e) {
-  console.warn('[Calls] react-native-webrtc not available. Run: expo run:android or expo run:ios');
+  console.log('[Calls:BOOT] WebRTC globals assigned:',
+    'mediaDevices=', !!mediaDevices,
+    'RTCView=', !!RTCView,
+    'PC=', !!_PC,
+    'SDP=', !!_SDP,
+    'ICE=', !!_ICE,
+    'MS=', !!_MS,
+  );
+} catch (e: any) {
+  console.error('[Calls:BOOT] ❌ react-native-webrtc FAILED to load:', e?.message ?? e);
+  console.error('[Calls:BOOT] Stack:', e?.stack ?? 'no stack');
 }
 
 // Polyfill for peerjs — MUST happen before 'peerjs' is imported
+console.log('[Calls:BOOT] Patching WebRTC globals onto global…');
 (function patchWebRTCGlobals() {
-  if (typeof global === 'undefined') return;
+  if (typeof global === 'undefined') {
+    console.warn('[Calls:BOOT] global is undefined — skipping patch');
+    return;
+  }
   const g = global as Record<string, unknown>;
+  const before = {
+    PC:  !!g.RTCPeerConnection,
+    SDP: !!g.RTCSessionDescription,
+    ICE: !!g.RTCIceCandidate,
+    MS:  !!g.MediaStream,
+  };
   if (_PC  && !g.RTCPeerConnection)     g.RTCPeerConnection     = _PC;
   if (_SDP && !g.RTCSessionDescription) g.RTCSessionDescription = _SDP;
   if (_ICE && !g.RTCIceCandidate)       g.RTCIceCandidate       = _ICE;
   if (_MS  && !g.MediaStream)           g.MediaStream           = _MS;
+  console.log('[Calls:BOOT] Global patch complete.',
+    'Before:', JSON.stringify(before),
+    'After: PC=', !!g.RTCPeerConnection,
+    'SDP=', !!g.RTCSessionDescription,
+    'ICE=', !!g.RTCIceCandidate,
+    'MS=', !!g.MediaStream,
+  );
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+console.log('[Calls:BOOT] Starting React + RN imports…');
 import React, {
   useState, useEffect, useRef, useCallback, useMemo,
 } from 'react';
@@ -43,16 +75,42 @@ import {
   BackHandler, ScrollView,
   AppState, type AppStateStatus,
 } from 'react-native';
-import Peer from 'peerjs';
+console.log('[Calls:BOOT] React Native imports OK');
+
+let Peer: any = null;
+try {
+  console.log('[Calls:BOOT] Attempting require("peerjs")…');
+  const peerModule = require('peerjs');
+  Peer = peerModule.default ?? peerModule.Peer ?? peerModule;
+  console.log('[Calls:BOOT] peerjs loaded. Type:', typeof Peer);
+} catch (e: any) {
+  console.error('[Calls:BOOT] ❌ peerjs FAILED to load:', e?.message ?? e);
+  console.error('[Calls:BOOT] Stack:', e?.stack ?? 'no stack');
+}
+
 import type { MediaConnection, DataConnection } from 'peerjs';
-import InCallManager from 'react-native-incall-manager';
+
+let InCallManager: any = null;
+try {
+  console.log('[Calls:BOOT] Attempting require("react-native-incall-manager")…');
+  InCallManager = require('react-native-incall-manager').default;
+  console.log('[Calls:BOOT] InCallManager loaded:', !!InCallManager);
+} catch (e: any) {
+  console.error('[Calls:BOOT] ❌ react-native-incall-manager FAILED:', e?.message ?? e);
+}
+
 import useCurrentUser from '@/features/auth/hooks/useCurrentUser';
 import { useEmployeeHierarchy, type Employee } from '@/services/call';
+
+console.log('[Calls:BOOT] ✅ All imports done');
+console.log('[Calls:BOOT] Summary — RTCView:', !!RTCView, '| mediaDevices:', !!mediaDevices, '| Peer:', !!Peer, '| InCallManager:', !!InCallManager);
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const PEER_HOST = process.env.EXPO_PUBLIC_PEER_HOST ?? '0.peerjs.com';
 const PEER_PORT = Number(process.env.EXPO_PUBLIC_PEER_PORT ?? 443);
 const PEER_PATH = process.env.EXPO_PUBLIC_PEER_PATH ?? '/';
+
+console.log('[Calls:CONFIG] PEER_HOST:', PEER_HOST, '| PEER_PORT:', PEER_PORT, '| PEER_PATH:', PEER_PATH);
 
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -61,6 +119,7 @@ const ICE_SERVERS = [
 ];
 
 const { width: SW, height: SH } = Dimensions.get('window');
+console.log('[Calls:CONFIG] Screen:', SW, 'x', SH);
 
 const COLORS = [
   '#3b5bdb','#7048e8','#d6336c','#0c8599',
@@ -128,9 +187,62 @@ const fmt = (s: number) =>
 
 // ─── Vibration ring ───────────────────────────────────────────────────────────
 const ringVibration = {
-  start: () => Vibration.vibrate([0, 700, 500, 700, 500, 700], true),
-  stop:  () => Vibration.cancel(),
+  start: () => { console.log('[Calls:RING] Starting vibration'); Vibration.vibrate([0, 700, 500, 700, 500, 700], true); },
+  stop:  () => { console.log('[Calls:RING] Stopping vibration'); Vibration.cancel(); },
 };
+
+// ─── Error Boundary ───────────────────────────────────────────────────────────
+class CallsErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: string | null; errorInfo: string | null }
+> {
+  state = { error: null, errorInfo: null };
+
+  static getDerivedStateFromError(e: Error) {
+    console.error('[Calls:BOUNDARY] ❌ React error caught:', e?.message);
+    return { error: e?.message ?? String(e), errorInfo: null };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[Calls:BOUNDARY] ❌ componentDidCatch:', error?.message);
+    console.error('[Calls:BOUNDARY] Component stack:', info?.componentStack);
+    this.setState({ errorInfo: info?.componentStack ?? null });
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#080810', padding: 24, justifyContent: 'center' }}>
+          <Text style={{ color: '#ed4245', fontSize: 18, fontWeight: '800', marginBottom: 12 }}>
+            ❌ Calls Crashed
+          </Text>
+          <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, marginBottom: 8, fontWeight: '600' }}>
+            Error:
+          </Text>
+          <Text style={{ color: '#ff9999', fontSize: 12, marginBottom: 16, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
+            {this.state.error}
+          </Text>
+          {this.state.errorInfo && (
+            <>
+              <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: '600', marginBottom: 4 }}>
+                Component stack:
+              </Text>
+              <ScrollView style={{ maxHeight: 200 }}>
+                <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
+                  {this.state.errorInfo}
+                </Text>
+              </ScrollView>
+            </>
+          )}
+          <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 16 }}>
+            Check adb logcat for [Calls:*] tags
+          </Text>
+        </SafeAreaView>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 function Avatar({ name, size = 44 }: { name: string; size?: number }) {
@@ -176,8 +288,9 @@ function CtrlBtn({
   );
 }
 
-// ─── Unavailable screen (shown when WebRTC not loaded) ────────────────────────
-function UnavailableScreen() {
+// ─── Unavailable screen ───────────────────────────────────────────────────────
+function UnavailableScreen({ reason }: { reason: string }) {
+  console.warn('[Calls:UNAVAILABLE] Showing unavailable screen. Reason:', reason);
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#080810', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
       <Text style={{ fontSize: 48, marginBottom: 16 }}>📵</Text>
@@ -185,7 +298,8 @@ function UnavailableScreen() {
         Dev Build Required
       </Text>
       <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', textAlign: 'center', lineHeight: 22 }}>
-        Calls require native WebRTC modules which are not available in Expo Go.{'\n\n'}
+        Calls require native WebRTC modules not available in Expo Go.{'\n\n'}
+        Reason: <Text style={{ color: '#ed4245' }}>{reason}</Text>{'\n\n'}
         Run:{'\n'}
         <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', color: '#818cf8' }}>
           expo run:android{'\n'}expo run:ios
@@ -308,27 +422,51 @@ function AudioCircle({
 //  Main Calls Component
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Calls() {
-  // Guard — show friendly screen if native modules missing
-  if (!RTCView || !mediaDevices) {
-    return <UnavailableScreen />;
+  console.log('[Calls:RENDER] Calls() root render — RTCView:', !!RTCView, '| mediaDevices:', !!mediaDevices, '| Peer:', !!Peer);
+
+  if (!RTCView) {
+    return <UnavailableScreen reason="RTCView is null (react-native-webrtc not loaded)" />;
+  }
+  if (!mediaDevices) {
+    return <UnavailableScreen reason="mediaDevices is null (react-native-webrtc not loaded)" />;
+  }
+  if (!Peer) {
+    return <UnavailableScreen reason="Peer is null (peerjs failed to load)" />;
   }
 
-  return <CallsInner />;
+  return (
+    <CallsErrorBoundary>
+      <CallsInner />
+    </CallsErrorBoundary>
+  );
 }
 
-// ─── Inner component (only renders when WebRTC is available) ──────────────────
+// ─── Inner component ──────────────────────────────────────────────────────────
 function CallsInner() {
+  console.log('[Calls:INNER] CallsInner() mounting…');
+
   const { data: currentUser } = useCurrentUser();
   const { employees: allEmployees, isLoading: empLoading } = useEmployeeHierarchy();
 
   const myName = useMemo(() => {
     const u = currentUser as Record<string, unknown> | undefined;
-    return (u?.full_name ?? u?.name ??
+    const name = (u?.full_name ?? u?.name ??
       `${u?.first_name ?? ''} ${u?.last_name ?? ''}`.trim() ?? 'Me') as string;
+    console.log('[Calls:USER] myName resolved:', name);
+    return name;
   }, [currentUser]);
 
   const myId     = String((currentUser as Record<string, unknown> | undefined)?.id ?? '');
   const myPeerId = `u-${myId}`;
+
+  useEffect(() => {
+    console.log('[Calls:USER] currentUser changed. id:', myId, '| peerId:', myPeerId, '| name:', myName);
+    console.log('[Calls:USER] currentUser keys:', currentUser ? Object.keys(currentUser as object).join(', ') : 'null');
+  }, [currentUser, myId, myPeerId, myName]);
+
+  useEffect(() => {
+    console.log('[Calls:EMPLOYEES] allEmployees count:', allEmployees.length, '| loading:', empLoading);
+  }, [allEmployees, empLoading]);
 
   const callPeople = useMemo(
     () => allEmployees.filter(e => String(e.id) !== myId),
@@ -338,9 +476,9 @@ function CallsInner() {
   const [view,     setView]    = useState<AppView>('home');
   const [callMode, setCallMode] = useState<CallMode>('audio');
 
-  const [peer,      setPeer]      = useState<Peer | null>(null);
+  const [peer,      setPeer]      = useState<any | null>(null);
   const [peerReady, setPeerReady] = useState(false);
-  const peerRef = useRef<Peer | null>(null);
+  const peerRef = useRef<any | null>(null);
 
   const [search,    setSearch]    = useState('');
   const [addSearch, setAddSearch] = useState('');
@@ -374,42 +512,85 @@ function CallsInner() {
   const inCallRef          = useRef(false);
   const initiatorPeerIdRef = useRef<string | null>(null);
   const resetCallStateRef  = useRef<() => void>(() => {});
-  const setupMediaConnRef = useRef<(c: MediaConnection, pid: string, uid: number, name: string, out: boolean) => void>(() => {});
+  const setupMediaConnRef  = useRef<(c: MediaConnection, pid: string, uid: number, name: string, out: boolean) => void>(() => {});
 
-  useEffect(() => { micMutedRef.current       = micMuted;       }, [micMuted]);
-  useEffect(() => { cameraOffRef.current      = cameraOff;      }, [cameraOff]);
-  useEffect(() => { callModeRef.current       = callMode;       }, [callMode]);
-  useEffect(() => { inCallRef.current         = inCall;         }, [inCall]);
+  useEffect(() => { micMutedRef.current        = micMuted;       }, [micMuted]);
+  useEffect(() => { cameraOffRef.current       = cameraOff;      }, [cameraOff]);
+  useEffect(() => { callModeRef.current        = callMode;       }, [callMode]);
+  useEffect(() => { inCallRef.current          = inCall;         }, [inCall]);
   useEffect(() => { initiatorPeerIdRef.current = initiatorPeerId; }, [initiatorPeerId]);
 
   const amInitiator = initiatorPeerId === myPeerId;
 
   // ── Peer init ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!myId || myId === 'undefined' || peerRef.current) return;
-    const p = new Peer(myPeerId, {
-      host: PEER_HOST, port: PEER_PORT, path: PEER_PATH,
-      secure: PEER_PORT === 443,
-      config: { iceServers: ICE_SERVERS },
-    });
-    p.on('open',        () => { setPeerReady(true); });
-    p.on('disconnected', () => { setPeerReady(false); try { p.reconnect(); } catch {} });
-    p.on('error',   (err: Error) => { console.warn('[Peer]', err.message); setPeerReady(false); });
-    p.on('close',       () => { setPeerReady(false); });
-    peerRef.current = p;
-    setPeer(p);
-    return () => { try { p.destroy(); } catch {} peerRef.current = null; };
+    console.log('[Calls:PEER] Peer init effect. myId:', myId, '| already exists:', !!peerRef.current);
+    if (!myId || myId === 'undefined') {
+      console.warn('[Calls:PEER] ⚠️ myId is empty/undefined — skipping peer init. currentUser:', JSON.stringify(currentUser));
+      return;
+    }
+    if (peerRef.current) {
+      console.log('[Calls:PEER] Peer already exists, skipping.');
+      return;
+    }
+    if (!Peer) {
+      console.error('[Calls:PEER] ❌ Peer class is null — cannot create peer');
+      return;
+    }
+
+    console.log('[Calls:PEER] Creating Peer:', myPeerId, '→', PEER_HOST + ':' + PEER_PORT + PEER_PATH);
+    try {
+      const p = new Peer(myPeerId, {
+        host: PEER_HOST, port: PEER_PORT, path: PEER_PATH,
+        secure: PEER_PORT === 443,
+        config: { iceServers: ICE_SERVERS },
+        debug: 2,
+      });
+      console.log('[Calls:PEER] Peer instance created:', !!p);
+
+      p.on('open', (id: string) => {
+        console.log('[Calls:PEER] ✅ Peer open. Assigned ID:', id);
+        setPeerReady(true);
+      });
+      p.on('disconnected', () => {
+        console.warn('[Calls:PEER] ⚠️ Peer disconnected. Attempting reconnect…');
+        setPeerReady(false);
+        try { p.reconnect(); } catch (e: any) { console.error('[Calls:PEER] Reconnect failed:', e?.message); }
+      });
+      p.on('error', (err: any) => {
+        console.error('[Calls:PEER] ❌ Peer error type:', err?.type, '| message:', err?.message ?? err);
+        setPeerReady(false);
+      });
+      p.on('close', () => {
+        console.warn('[Calls:PEER] Peer closed');
+        setPeerReady(false);
+      });
+
+      peerRef.current = p;
+      setPeer(p);
+    } catch (e: any) {
+      console.error('[Calls:PEER] ❌ Exception creating Peer:', e?.message);
+      console.error('[Calls:PEER] Stack:', e?.stack);
+    }
+
+    return () => {
+      console.log('[Calls:PEER] Cleanup — destroying peer');
+      try { peerRef.current?.destroy(); } catch {}
+      peerRef.current = null;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myId]);
 
   // ── Timer ─────────────────────────────────────────────────────────────────
   const startTimer = useCallback(() => {
     if (timerRef.current) return;
+    console.log('[Calls:TIMER] Starting call timer');
     setCallDuration(0);
     timerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
   }, []);
 
   const stopTimer = useCallback(() => {
+    console.log('[Calls:TIMER] Stopping call timer');
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
     setCallDuration(0);
@@ -417,25 +598,43 @@ function CallsInner() {
 
   // ── Get local media ───────────────────────────────────────────────────────
   const getMedia = useCallback(async (mode: CallMode): Promise<any> => {
+    console.log('[Calls:MEDIA] getMedia() called. mode:', mode, '| noiseSup:', noiseSup);
     const constraints: Record<string, unknown> = {
       audio: { echoCancellation: true, noiseSuppression: noiseSup, autoGainControl: true },
       video: mode === 'video'
         ? { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, facingMode: 'user' }
         : false,
     };
-    const stream = await mediaDevices.getUserMedia(constraints)
-      .catch(() => mediaDevices.getUserMedia({ audio: true, video: mode === 'video' }));
-    localStreamRef.current = stream;
-    setLocalStream(stream);
-    stream.getAudioTracks().forEach((t: any) => { t.enabled = !micMutedRef.current; });
-    if (mode === 'video') stream.getVideoTracks().forEach((t: any) => { t.enabled = !cameraOffRef.current; });
-    return stream;
+    console.log('[Calls:MEDIA] Constraints:', JSON.stringify(constraints));
+    try {
+      const stream = await mediaDevices.getUserMedia(constraints)
+        .catch((e: any) => {
+          console.warn('[Calls:MEDIA] First getUserMedia failed:', e?.message, '— retrying with basic constraints');
+          return mediaDevices.getUserMedia({ audio: true, video: mode === 'video' });
+        });
+      const audioTracks = stream.getAudioTracks();
+      const videoTracks = stream.getVideoTracks();
+      console.log('[Calls:MEDIA] ✅ Stream obtained. Audio tracks:', audioTracks.length, '| Video tracks:', videoTracks.length);
+      localStreamRef.current = stream;
+      setLocalStream(stream);
+      audioTracks.forEach((t: any) => { t.enabled = !micMutedRef.current; });
+      if (mode === 'video') videoTracks.forEach((t: any) => { t.enabled = !cameraOffRef.current; });
+      return stream;
+    } catch (e: any) {
+      console.error('[Calls:MEDIA] ❌ getUserMedia FAILED:', e?.message, '| name:', e?.name);
+      throw e;
+    }
   }, [noiseSup]);
 
   // ── Broadcast ─────────────────────────────────────────────────────────────
   const broadcastToAll = useCallback((msg: MetadataMessage) => {
+    const count = participantsRef.current.size;
+    console.log('[Calls:DATA] broadcastToAll type:', msg.type, '| participants:', count);
     participantsRef.current.forEach(p => {
-      if (p.dataConnection?.open) { try { p.dataConnection.send(msg); } catch {} }
+      if (p.dataConnection?.open) {
+        try { p.dataConnection.send(msg); }
+        catch (e: any) { console.warn('[Calls:DATA] Send failed to', p.id, ':', e?.message); }
+      }
     });
   }, []);
 
@@ -444,6 +643,7 @@ function CallsInner() {
 
   // ── Cleanup participant ───────────────────────────────────────────────────
   const cleanupParticipant = useCallback((pid: string, wasDeclined: boolean) => {
+    console.log('[Calls:CLEANUP] cleanupParticipant:', pid, '| wasDeclined:', wasDeclined, '| remaining after:', participantsRef.current.size - 1);
     activeConnsRef.current.delete(pid);
     participantsRef.current.delete(pid);
     streamReceivedRef.current.delete(pid);
@@ -451,12 +651,14 @@ function CallsInner() {
     setSpotlightId(prev => prev === pid ? null : prev);
 
     if (participantsRef.current.size === 0) {
+      console.log('[Calls:CLEANUP] No participants left — resetting call state');
       resetCallStateRef.current();
       setStatus(wasDeclined ? 'Call declined' : 'Call ended');
     } else if (initiatorPeerIdRef.current === pid) {
       const remaining = Array.from(participantsRef.current.values());
       const newHost   = remaining[0];
       if (newHost) {
+        console.log('[Calls:CLEANUP] Host left — transferring host to:', newHost.id);
         setInitiatorPeerId(newHost.id);
         initiatorPeerIdRef.current = newHost.id;
         if (newHost.id === myPeerId) broadcastToAll({ type: 'hostTransfer', newHostPeerId: myPeerId });
@@ -467,18 +669,23 @@ function CallsInner() {
 
   // ── Setup data connection ─────────────────────────────────────────────────
   const setupDataConnection = useCallback((dataConn: DataConnection, pid: string) => {
+    console.log('[Calls:DATA] setupDataConnection for:', pid);
+
     dataConn.on('open', () => {
+      console.log('[Calls:DATA] Data connection OPEN to:', pid);
       if (!dataConn.open) return;
       try {
         dataConn.send({ type: 'mute',     value: micMutedRef.current  } as MetadataMessage);
         dataConn.send({ type: 'videoOff', value: cameraOffRef.current } as MetadataMessage);
-      } catch {}
+      } catch (e: any) { console.warn('[Calls:DATA] Initial send failed:', e?.message); }
     });
 
     dataConn.on('data', (data: unknown) => {
       const msg = data as MetadataMessage;
+      console.log('[Calls:DATA] Received from', pid, '— type:', msg.type);
 
       if (msg.type === 'decline') {
+        console.log('[Calls:DATA] Call declined by:', pid);
         ringVibration.stop();
         const wasDeclined = !streamReceivedRef.current.has(pid);
         if (wasDeclined) setStatus('Call declined');
@@ -486,16 +693,19 @@ function CallsInner() {
         return;
       }
       if (msg.type === 'peerLeft') {
+        console.log('[Calls:DATA] Peer left:', msg.peerId);
         if (participantsRef.current.has(msg.peerId)) cleanupParticipant(msg.peerId, false);
         return;
       }
       if (msg.type === 'hostTransfer') {
+        console.log('[Calls:DATA] Host transferred to:', msg.newHostPeerId);
         setInitiatorPeerId(msg.newHostPeerId);
         initiatorPeerIdRef.current = msg.newHostPeerId;
         return;
       }
       if (msg.type === 'kick') {
         const { peerId: kickedPid } = msg;
+        console.log('[Calls:DATA] Kick message. Target:', kickedPid, '| me:', myPeerId);
         if (kickedPid === myPeerId) {
           resetCallStateRef.current();
           setStatus('You were removed from the call');
@@ -524,8 +734,10 @@ function CallsInner() {
       }
       if (msg.type === 'newPeer') {
         const { peer: np } = msg;
+        console.log('[Calls:DATA] New peer announced:', np.peerId, np.name);
         const p = peerRef.current;
         if (np.peerId !== myPeerId && !activeConnsRef.current.has(np.peerId) && p && localStreamRef.current) {
+          console.log('[Calls:DATA] Calling new peer:', np.peerId);
           const conn = p.call(np.peerId, localStreamRef.current, {
             metadata: {
               mode: callModeRef.current, fromName: myName, fromUserId: Number(myId),
@@ -538,19 +750,26 @@ function CallsInner() {
     });
 
     dataConn.on('close', () => {
+      console.log('[Calls:DATA] Data connection CLOSED for:', pid);
       setParticipants(prev => prev.map(p => p.id === pid ? { ...p, dataConnection: undefined } : p));
+    });
+
+    dataConn.on('error', (e: any) => {
+      console.error('[Calls:DATA] Data connection ERROR for:', pid, '—', e?.message ?? e);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myPeerId, myName, myId, cleanupParticipant]);
 
   // ── Reset call state ──────────────────────────────────────────────────────
   const resetCallState = useCallback(() => {
+    console.log('[Calls:RESET] resetCallState() called');
     ringVibration.stop();
     setInCall(false);
-    localStreamRef.current?.getTracks().forEach((t: any) => t.stop());
+    localStreamRef.current?.getTracks().forEach((t: any) => { console.log('[Calls:RESET] Stopping track:', t.kind); t.stop(); });
     localStreamRef.current = null;
     setLocalStream(null);
     stopTimer();
+    console.log('[Calls:RESET] Closing', activeConnsRef.current.size, 'active connections');
     activeConnsRef.current.forEach(c => { try { c.close(); } catch {} });
     activeConnsRef.current.clear();
     participantsRef.current.forEach(p => { try { p.dataConnection?.close(); } catch {} });
@@ -566,7 +785,10 @@ function CallsInner() {
     setInitiatorPeerId(null);
     setAddSearch('');
     setAddPanelOpen(false);
-    try { InCallManager.stop(); InCallManager.setKeepScreenOn(false); } catch {}
+    try { InCallManager?.stop(); InCallManager?.setKeepScreenOn(false); } catch (e: any) {
+      console.warn('[Calls:RESET] InCallManager stop failed:', e?.message);
+    }
+    console.log('[Calls:RESET] ✅ Reset complete');
   }, [stopTimer]);
 
   useEffect(() => { resetCallStateRef.current = resetCallState; }, [resetCallState]);
@@ -575,7 +797,11 @@ function CallsInner() {
   const setupMediaConnection = useCallback((
     conn: MediaConnection, pid: string, userId: number, name: string, isOutgoing: boolean,
   ) => {
-    if (activeConnsRef.current.has(pid)) return;
+    console.log('[Calls:CONN] setupMediaConnection. pid:', pid, '| name:', name, '| outgoing:', isOutgoing);
+    if (activeConnsRef.current.has(pid)) {
+      console.warn('[Calls:CONN] Already have connection for:', pid, '— skipping');
+      return;
+    }
     activeConnsRef.current.set(pid, conn);
 
     const participant: Participant = {
@@ -586,14 +812,21 @@ function CallsInner() {
     setParticipants(Array.from(participantsRef.current.values()));
 
     if (peerRef.current && isOutgoing) {
-      const dataConn = peerRef.current.connect(pid, { reliable: true });
-      participant.dataConnection = dataConn;
-      participantsRef.current.set(pid, participant);
-      setParticipants(Array.from(participantsRef.current.values()));
-      setupDataConnection(dataConn, pid);
+      console.log('[Calls:CONN] Opening data channel to:', pid);
+      try {
+        const dataConn = peerRef.current.connect(pid, { reliable: true });
+        participant.dataConnection = dataConn;
+        participantsRef.current.set(pid, participant);
+        setParticipants(Array.from(participantsRef.current.values()));
+        setupDataConnection(dataConn, pid);
+      } catch (e: any) {
+        console.error('[Calls:CONN] Data channel open failed:', e?.message);
+      }
     }
 
     conn.on('stream', (remoteStream: any) => {
+      const tracks = { audio: remoteStream.getAudioTracks().length, video: remoteStream.getVideoTracks().length };
+      console.log('[Calls:CONN] ✅ Remote stream received from:', pid, '| tracks:', JSON.stringify(tracks));
       streamReceivedRef.current.add(pid);
       const p = participantsRef.current.get(pid);
       if (p) {
@@ -607,12 +840,13 @@ function CallsInner() {
 
     conn.on('close', () => {
       const wasDeclined = !streamReceivedRef.current.has(pid);
+      console.log('[Calls:CONN] Connection closed for:', pid, '| wasDeclined:', wasDeclined);
       if (wasDeclined && isOutgoing) setStatus('Call declined');
       cleanupParticipant(pid, wasDeclined && isOutgoing);
     });
 
-    conn.on('error', (err: Error) => {
-      console.warn('[MediaConn]', pid, err.message);
+    conn.on('error', (err: any) => {
+      console.error('[Calls:CONN] ❌ MediaConnection error for:', pid, '—', err?.message ?? err);
       cleanupParticipant(pid, false);
     });
   }, [setupDataConnection, cleanupParticipant, startTimer]);
@@ -632,6 +866,7 @@ function CallsInner() {
               rtt = r.currentRoundTripTime * 1000;
           });
           const q: NetQuality = rtt < 0 ? 'unknown' : rtt < 150 ? 'good' : rtt < 400 ? 'fair' : 'poor';
+          console.log('[Calls:NET] Quality for', pid, ':', q, '(rtt:', Math.round(rtt), 'ms)');
           setParticipants(prev => prev.map(p => p.id === pid ? { ...p, netQuality: q } : p));
         } catch {}
       }
@@ -642,9 +877,12 @@ function CallsInner() {
   // ── Incoming DATA connection listener ─────────────────────────────────────
   useEffect(() => {
     if (!peer) return;
+    console.log('[Calls:PEER] Attaching data connection listener');
     const onDataConn = (dataConn: DataConnection) => {
+      console.log('[Calls:DATA] Incoming data connection from:', dataConn.peer);
       const existing = participantsRef.current.get(dataConn.peer);
       if (existing && !existing.dataConnection) {
+        console.log('[Calls:DATA] Attaching to existing participant:', dataConn.peer);
         existing.dataConnection = dataConn;
         participantsRef.current.set(existing.id, existing);
         setParticipants(Array.from(participantsRef.current.values()));
@@ -653,6 +891,7 @@ function CallsInner() {
       }
       dataConn.on('data', (data: unknown) => {
         const msg = data as MetadataMessage;
+        console.log('[Calls:DATA] Orphan data from', dataConn.peer, '— type:', msg.type);
         if (msg.type === 'decline') {
           const pid = dataConn.peer;
           const wasDeclined = !streamReceivedRef.current.has(pid);
@@ -705,6 +944,7 @@ function CallsInner() {
   // ── Incoming MEDIA call listener ──────────────────────────────────────────
   useEffect(() => {
     if (!peer) return;
+    console.log('[Calls:PEER] Attaching incoming call listener');
     const onCall = (call: MediaConnection) => {
       const meta           = (call.metadata ?? {}) as CallMetadata;
       const mode: CallMode = meta.mode === 'video' ? 'video' : 'audio';
@@ -712,7 +952,12 @@ function CallsInner() {
       const userId         = meta.fromUserId ?? 0;
       const callInitiator  = meta.initiatorPeerId ?? call.peer;
 
+      console.log('[Calls:INCOMING] Incoming call from:', call.peer, '| name:', name, '| mode:', mode, '| isGroup:', meta.isGroup);
+      console.log('[Calls:INCOMING] metadata:', JSON.stringify(meta));
+      console.log('[Calls:INCOMING] hasLocalStream:', !!localStreamRef.current, '| inCall:', inCallRef.current);
+
       if (localStreamRef.current && meta.isGroup) {
+        console.log('[Calls:INCOMING] Group call auto-answer for:', call.peer);
         if (!initiatorPeerIdRef.current) {
           setInitiatorPeerId(callInitiator);
           initiatorPeerIdRef.current = callInitiator;
@@ -720,6 +965,7 @@ function CallsInner() {
         call.answer(localStreamRef.current);
         setupMediaConnRef.current(call, call.peer, userId, name, false);
         if (meta.existingPeers && peerRef.current) {
+          console.log('[Calls:INCOMING] Connecting to', meta.existingPeers.length, 'existing peers');
           meta.existingPeers.forEach(({ peerId: ep, userId: eu, name: en }) => {
             if (ep !== myPeerId && !activeConnsRef.current.has(ep)) {
               const nc = peerRef.current!.call(ep, localStreamRef.current!, {
@@ -735,10 +981,19 @@ function CallsInner() {
         return;
       }
 
+      console.log('[Calls:INCOMING] Showing incoming call UI for:', name);
       setIncoming({ name, userId, mode, conn: call });
       ringVibration.start();
-      call.on('close', () => { setIncoming(prev => prev?.conn === call ? null : prev); ringVibration.stop(); });
-      call.on('error', () => { setIncoming(prev => prev?.conn === call ? null : prev); ringVibration.stop(); });
+      call.on('close', () => {
+        console.log('[Calls:INCOMING] Call closed before answer from:', call.peer);
+        setIncoming(prev => prev?.conn === call ? null : prev);
+        ringVibration.stop();
+      });
+      call.on('error', (e: any) => {
+        console.error('[Calls:INCOMING] Incoming call error from:', call.peer, '—', e?.message);
+        setIncoming(prev => prev?.conn === call ? null : prev);
+        ringVibration.stop();
+      });
     };
     peer.on('call', onCall);
     return () => { peer.off('call', onCall); };
@@ -747,19 +1002,24 @@ function CallsInner() {
 
   // ── Accept / Decline ──────────────────────────────────────────────────────
   const acceptIncoming = useCallback(async () => {
+    console.log('[Calls:ACCEPT] acceptIncoming() called. incoming:', !!incoming);
     if (!incoming) return;
     ringVibration.stop();
     const { conn, mode, name, userId } = incoming;
     const meta          = (conn.metadata ?? {}) as CallMetadata;
     const callInitiator = meta.initiatorPeerId ?? conn.peer;
     try {
+      console.log('[Calls:ACCEPT] Getting media for mode:', mode);
       const stream = localStreamRef.current ?? await getMedia(mode);
+      console.log('[Calls:ACCEPT] Answering call from:', conn.peer);
       conn.answer(stream);
       if (!inCallRef.current) {
         setInCall(true); setCallMode(mode);
         setInitiatorPeerId(callInitiator); initiatorPeerIdRef.current = callInitiator;
         setView('call');
-        try { InCallManager.start({ media: mode }); InCallManager.setKeepScreenOn(true); } catch {}
+        try { InCallManager?.start({ media: mode }); InCallManager?.setKeepScreenOn(true); } catch (e: any) {
+          console.warn('[Calls:ACCEPT] InCallManager start failed:', e?.message);
+        }
       }
       setupMediaConnRef.current(conn, conn.peer, userId, name, false);
       if (meta.existingPeers && peerRef.current) {
@@ -775,7 +1035,8 @@ function CallsInner() {
           }
         });
       }
-    } catch {
+    } catch (e: any) {
+      console.error('[Calls:ACCEPT] ❌ Failed:', e?.message, '| name:', e?.name);
       setStatus('Permission denied');
       resetCallState();
     }
@@ -783,6 +1044,7 @@ function CallsInner() {
   }, [incoming, getMedia, myPeerId, myName, myId, resetCallState]);
 
   const declineIncoming = useCallback(() => {
+    console.log('[Calls:DECLINE] declineIncoming() called');
     ringVibration.stop();
     if (!incoming) return;
     const activePeer = peerRef.current;
@@ -803,30 +1065,38 @@ function CallsInner() {
   // ── Controls ──────────────────────────────────────────────────────────────
   const toggleMic = useCallback(() => {
     const next = !micMuted;
+    console.log('[Calls:CTRL] toggleMic → muted:', next);
     setMicMuted(next);
     localStreamRef.current?.getAudioTracks().forEach((t: any) => { t.enabled = !next; });
   }, [micMuted]);
 
   const toggleCamera = useCallback(() => {
     const next = !cameraOff;
+    console.log('[Calls:CTRL] toggleCamera → off:', next);
     setCameraOff(next);
     localStreamRef.current?.getVideoTracks().forEach((t: any) => { t.enabled = !next; });
     broadcastToAll({ type: 'videoOff', value: next });
   }, [cameraOff, broadcastToAll]);
 
   const flipCamera = useCallback(() => {
+    console.log('[Calls:CTRL] flipCamera()');
     const vt = localStreamRef.current?.getVideoTracks()[0];
     if (vt) { (vt as any)._switchCamera?.(); setFrontCamera(f => !f); }
+    else console.warn('[Calls:CTRL] No video track to flip');
   }, []);
 
   const toggleSpeaker = useCallback(() => {
     const next = !speakerOn;
+    console.log('[Calls:CTRL] toggleSpeaker → on:', next);
     setSpeakerOn(next);
-    try { InCallManager.setSpeakerphoneOn(next); } catch {}
+    try { InCallManager?.setSpeakerphoneOn(next); } catch (e: any) {
+      console.warn('[Calls:CTRL] setSpeakerphoneOn failed:', e?.message);
+    }
   }, [speakerOn]);
 
   const toggleNoiseSup = useCallback(async () => {
     const next = !noiseSup;
+    console.log('[Calls:CTRL] toggleNoiseSup → on:', next);
     setNoiseSup(next);
     if (!inCall || !localStreamRef.current) return;
     try {
@@ -845,10 +1115,14 @@ function CallsInner() {
           if (sender) sender.replaceTrack(nt);
         } catch {}
       });
-    } catch {}
+      console.log('[Calls:CTRL] ✅ Noise suppression toggled');
+    } catch (e: any) {
+      console.error('[Calls:CTRL] toggleNoiseSup failed:', e?.message);
+    }
   }, [noiseSup, inCall]);
 
   const endCall = useCallback(() => {
+    console.log('[Calls:END] endCall() called. participants:', participantsRef.current.size);
     broadcastToAll({ type: 'peerLeft', peerId: myPeerId });
     activeConnsRef.current.forEach((conn, pid) => {
       if (!streamReceivedRef.current.has(pid) && peerRef.current) {
@@ -865,9 +1139,11 @@ function CallsInner() {
     resetCallState();
     setStatus('Call ended');
     setView('home');
+    console.log('[Calls:END] ✅ Call ended');
   }, [broadcastToAll, myPeerId, resetCallState]);
 
   const removeParticipant = useCallback((pid: string) => {
+    console.log('[Calls:KICK] removeParticipant:', pid);
     broadcastToAll({ type: 'kick', peerId: pid });
     const p = participantsRef.current.get(pid);
     if (p?.dataConnection?.open) {
@@ -885,7 +1161,9 @@ function CallsInner() {
   }, [broadcastToAll]);
 
   const callEmployee = useCallback(async (emp: Employee) => {
+    console.log('[Calls:CALL] callEmployee:', emp.id, emp.full_name, '| peerReady:', peerReady, '| mode:', callMode);
     if (!peerRef.current || !peerReady) {
+      console.warn('[Calls:CALL] ⚠️ Peer not ready');
       Alert.alert('Not connected', 'Peer service not ready. Please try again.');
       return;
     }
@@ -894,17 +1172,23 @@ function CallsInner() {
     try {
       setStatus(`Calling ${emp.full_name}…`);
       ringVibration.start();
+      console.log('[Calls:CALL] Getting media…');
       const stream = await getMedia(callMode);
+      console.log('[Calls:CALL] Calling peer:', targetPeerId);
       setInitiatorPeerId(myPeerId); initiatorPeerIdRef.current = myPeerId;
       const conn = peerRef.current.call(targetPeerId, stream, {
         metadata: {
           mode: callMode, fromName: myName, fromUserId: Number(myId), initiatorPeerId: myPeerId,
         } as CallMetadata,
       });
+      console.log('[Calls:CALL] Call connection created:', !!conn);
       setInCall(true); setView('call');
-      try { InCallManager.start({ media: callMode }); InCallManager.setKeepScreenOn(true); } catch {}
+      try { InCallManager?.start({ media: callMode }); InCallManager?.setKeepScreenOn(true); } catch (e: any) {
+        console.warn('[Calls:CALL] InCallManager start failed:', e?.message);
+      }
       setupMediaConnection(conn, targetPeerId, emp.id, emp.full_name, true);
-    } catch {
+    } catch (e: any) {
+      console.error('[Calls:CALL] ❌ callEmployee failed:', e?.message, '| name:', e?.name);
       ringVibration.stop();
       setStatus('Permission denied — allow mic/camera and retry');
       resetCallState();
@@ -912,21 +1196,26 @@ function CallsInner() {
   }, [peerReady, callMode, myPeerId, myName, myId, getMedia, setupMediaConnection, resetCallState]);
 
   const startGroupCall = useCallback(async () => {
+    console.log('[Calls:GROUP] startGroupCall. selected:', selectedIds.size, '| peerReady:', peerReady);
     if (!peerRef.current || !peerReady || selectedIds.size === 0) return;
     try {
       setStatus('Starting group call…');
       ringVibration.start();
       const stream  = await getMedia(callMode);
       const targets = callPeople.filter(e => selectedIds.has(e.id));
+      console.log('[Calls:GROUP] Calling', targets.length, 'people');
       setInitiatorPeerId(myPeerId); initiatorPeerIdRef.current = myPeerId;
       setInCall(true); setView('call'); setGroupMode(false); setSelectedIds(new Set());
-      try { InCallManager.start({ media: callMode }); InCallManager.setKeepScreenOn(true); } catch {}
+      try { InCallManager?.start({ media: callMode }); InCallManager?.setKeepScreenOn(true); } catch (e: any) {
+        console.warn('[Calls:GROUP] InCallManager start failed:', e?.message);
+      }
       for (const emp of targets) {
         const tpid = `u-${emp.id}`;
         const existingPeers: GroupPeerInfo[] = [
           { peerId: myPeerId, userId: Number(myId), name: myName },
           ...targets.filter(t => t.id !== emp.id).map(t => ({ peerId: `u-${t.id}`, userId: t.id, name: t.full_name })),
         ];
+        console.log('[Calls:GROUP] Calling:', tpid, '| existingPeers:', existingPeers.length);
         const conn = peerRef.current!.call(tpid, stream, {
           metadata: {
             mode: callMode, fromName: myName, fromUserId: Number(myId),
@@ -935,15 +1224,20 @@ function CallsInner() {
         });
         setupMediaConnection(conn, tpid, emp.id, emp.full_name, true);
       }
-    } catch {
+    } catch (e: any) {
+      console.error('[Calls:GROUP] ❌ startGroupCall failed:', e?.message);
       ringVibration.stop(); setStatus('Permission denied'); resetCallState();
     }
   }, [peerReady, selectedIds, callMode, callPeople, myPeerId, myId, myName, getMedia, setupMediaConnection, resetCallState]);
 
   const addToCall = useCallback(async (emp: Employee) => {
+    console.log('[Calls:ADD] addToCall:', emp.id, emp.full_name);
     if (!peerRef.current || !localStreamRef.current) return;
     const tpid = `u-${emp.id}`;
-    if (activeConnsRef.current.has(tpid)) return;
+    if (activeConnsRef.current.has(tpid)) {
+      console.warn('[Calls:ADD] Already connected to:', tpid);
+      return;
+    }
     const existingPeers: GroupPeerInfo[] = [
       { peerId: myPeerId, userId: Number(myId), name: myName },
       ...Array.from(participantsRef.current.values()).map(p => ({ peerId: p.id, userId: p.userId, name: p.name })),
@@ -962,6 +1256,7 @@ function CallsInner() {
   useEffect(() => {
     if (Platform.OS !== 'android') return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      console.log('[Calls:NAV] Android back pressed. view:', view);
       if (view === 'call') {
         Alert.alert('Leave call?', 'Do you want to end the call?', [
           { text: 'Stay', style: 'cancel' },
@@ -977,6 +1272,7 @@ function CallsInner() {
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
+      console.log('[Calls:APP] AppState changed to:', state, '| incoming:', !!incoming);
       if (state === 'background' && incoming) declineIncoming();
     });
     return () => sub.remove();
@@ -1027,13 +1323,13 @@ function CallsInner() {
       <Text style={s.homeSubtitle}>Choose how you want to connect</Text>
       <View style={s.homeCards}>
         <TouchableOpacity style={[s.homeCard, { backgroundColor: '#1d4ed8' }]} activeOpacity={0.85}
-          onPress={() => { setCallMode('audio'); setSearch(''); setView('employees'); }}>
+          onPress={() => { console.log('[Calls:NAV] → Voice Call screen'); setCallMode('audio'); setSearch(''); setView('employees'); }}>
           <Text style={s.homeCardIcon}>🎙️</Text>
           <Text style={s.homeCardTitle}>Voice Call</Text>
           <Text style={s.homeCardSub}>High-quality audio with noise suppression</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[s.homeCard, { backgroundColor: '#7e22ce' }]} activeOpacity={0.85}
-          onPress={() => { setCallMode('video'); setSearch(''); setView('employees'); }}>
+          onPress={() => { console.log('[Calls:NAV] → Video Call screen'); setCallMode('video'); setSearch(''); setView('employees'); }}>
           <Text style={s.homeCardIcon}>📹</Text>
           <Text style={s.homeCardTitle}>Video Call</Text>
           <Text style={s.homeCardSub}>Face-to-face HD video with group support</Text>

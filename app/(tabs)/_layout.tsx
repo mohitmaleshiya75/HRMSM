@@ -12,7 +12,8 @@ import React, {
   useState,
 } from 'react';
 import { AppState, AppStateStatus, StyleSheet, Text, View } from 'react-native';
-
+// ✅ ADD this import with your other imports
+import { usePushNotifications } from '@/services/usePushNotifications';
 // --- UnreadMessagesContext ---
 interface UnreadMessagesContextType {
   totalUnread: number;
@@ -38,7 +39,7 @@ async function fetchUnreadCountFromApi(token: string): Promise<number> {
     return 0;
   }
 
-  const response = await fetch(`${API_BASE_URL}/chat/unread-count/`, { // Added trailing slash
+  const response = await fetch(`${API_BASE_URL}/notifications/unread-count/`, { // Added trailing slash
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -106,6 +107,13 @@ function UnreadMessagesProvider({ children }: { children: React.ReactNode }) {
   );
 }
 // --- End UnreadMessagesContext ---
+
+// ✅ ADD this entire component before the TabLayout function
+function PushNotificationHandler() {
+  const { refreshUnreadCount } = useUnreadMessages();
+  usePushNotifications(refreshUnreadCount);
+  return null;
+}
 
 function TabBarIcon(props: {
   name: React.ComponentProps<typeof FontAwesome>['name'];
@@ -184,6 +192,8 @@ export default function TabLayout() {
 
   return (
     <UnreadMessagesProvider>
+          <PushNotificationHandler />
+
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,

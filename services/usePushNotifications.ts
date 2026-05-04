@@ -7,7 +7,6 @@ import { useRouter } from 'expo-router';
 
 import {
   createNotificationChannel,
-  displayChatNotification,
   registerNotifeeHandlers,
   setupIOSCategories,
   clearRoomNotificationCache,
@@ -16,7 +15,7 @@ import {
 
 import { makeApi } from '@/components/chat/chatAPI';
 
-export function usePushNotifications() {
+export function usePushNotifications(onNewMessage?: () => void) {
   const router = useRouter();
   const cleanupRef = useRef<(() => void) | null>(null);
 
@@ -37,20 +36,14 @@ export function usePushNotifications() {
 
     await syncToken();
 
-    const foregroundSub = Notifications.addNotificationReceivedListener(async (notification) => {
-      const data = notification.request.content.data;
-
-      const title     = (data?.title     as string) || notification.request.content.title || 'New Message';
-      const body      = (data?.body      as string) || notification.request.content.body  || '';
-      const roomId    = (data?.room_id   as string) || '';
-      const messageId = (data?.msg_id    as string) || '';
-      const roomName  = (data?.room_name as string) || '';
-      const avatarUri = (data?.avatar    as string) || '';
-
-      if (!roomId) return;
-
-      await displayChatNotification({ title, body, roomId, messageId, roomName });
-    });
+  const foregroundSub = Notifications.addNotificationReceivedListener((notification) => {
+  const data = notification.request.content.data;
+  const roomId = (data?.room_id as string) || '';
+  if (!roomId) return;
+  console.log('[Push FG] Received for room:', roomId);
+  // ✅ Immediately refresh badge count
+  onNewMessage?.();
+});
 
     const lastResponse = await Notifications.getLastNotificationResponseAsync();
     if (lastResponse?.notification.request.content.data?.room_id) {
@@ -87,12 +80,8 @@ export function usePushNotifications() {
 
 export async function syncToken() {
   try {
-    // ✅ Always use getExpoPushTokenAsync — works in Expo Go AND production builds
-    const expoToken = await Notifications.getExpoPushTokenAsync({
-      projectId: 'bf36ef80-b827-421a-bee4-e9071b8a039a'
-    });
-    const fcmToken = expoToken.data; // ExponentPushToken[...]
-
+   const tokenObj = await Notifications.getDevicePushTokenAsync();
+const fcmToken = tokenObj.data; // raw FCM token — works when app is killed
     const accessToken = await SecureStore.getItemAsync('accessToken');
     if (!accessToken) return;
 

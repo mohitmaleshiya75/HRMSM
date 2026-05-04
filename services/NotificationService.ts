@@ -7,16 +7,7 @@ export const CHANNEL_ID = 'chat_messages';
 // ─── In-memory store ──────────────────────────────────────────────────────────
 const roomMessageCache = new Map<string, { text: string; timestamp: number; senderName: string }[]>();
 
-// ─── Set foreground handler (call ONCE at app start) ─────────────────────────
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+
 
 // ─── Create Android channel ───────────────────────────────────────────────────
 export async function createNotificationChannel() {
@@ -24,7 +15,7 @@ export async function createNotificationChannel() {
   await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
     name: 'Chat Messages',
     importance: Notifications.AndroidImportance.HIGH,
-    sound: 'notification.wav',
+    sound: 'default',
     vibrationPattern: [0, 250, 250, 250],
     enableVibrate: true,
   });
@@ -90,7 +81,7 @@ export async function displayChatNotification({
     content: {
       title: displayTitle,
       body,
-      sound: 'notification.wav',
+      sound: 'default',
       data: { roomId, messageId },
       categoryIdentifier: 'chat',
     },
