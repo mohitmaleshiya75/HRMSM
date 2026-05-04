@@ -396,7 +396,7 @@ export default function EmployeeDashboardScreen() {
             >
               <View style={styles.eventIcon}>
                 <Image
-                  src={user?.profile_image_url}
+                  src={event?.profile_image_url}
                   height={20}
                   width={20}
                 // color="#10b981"

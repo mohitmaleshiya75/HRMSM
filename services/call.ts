@@ -66,9 +66,7 @@ export function normaliseEmployee(raw: Record<string, unknown>): Employee {
 }
 
 // ─── Fetch ────────────────────────────────────────────────────────────────────
-export async function fetchEmployeeHierarchy(
-  token: string,
-): Promise<Employee[]> {
+export async function fetchEmployeeHierarchy(token: string): Promise<Employee[]> {
   const res = await fetch(`${API_BASE}/accounts/employee-hierarchy/`, {
     headers: {
       Authorization: `Bearer ${token}`,
