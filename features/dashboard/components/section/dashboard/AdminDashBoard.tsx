@@ -8,18 +8,26 @@ import {
   Dimensions,
   RefreshControl,
   useColorScheme,
+  Image,
 } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import useGetDashboardStats from "@/features/dashboard/hooks/useGetDashboardStats";
 import DashboardSkeleton from "../skelaton/DashboardSkelaton";
+import { useRouter } from "expo-router";
+import useGetActiveAnnouncements from "@/features/announcements/hooks/useGetActiveAnnouncements";
+import useGetBirthday from "@/features/birthdays/hooks/useGetBirthdays";
+import useGetHolidays from "@/features/holidays/hooks/useGetHolidays";
 
 // const { width } = Dimensions.get("window");
 
 export default function DashboardScreen() {
   const theme = useColorScheme();
+  const router = useRouter();
   const isDark = theme === "dark";
-  const { data:AdminStats, isLoading } = useGetDashboardStats();
-
+  const { birthdays: upcomingEvents, isLoading: LoadingBirthday } = useGetBirthday();
+  const { data: announcements, isLoading: LoadingAnnouncements } = useGetActiveAnnouncements();
+  const { data: AdminStats, isLoading } = useGetDashboardStats();
+  const { holidays, isLoading: LoadingHolidays } = useGetHolidays();
   const [refreshing, setRefreshing] = useState(false);
   const [presentDialogOpen, setPresentDialogOpen] = useState(false);
   const [absentDialogOpen, setAbsentDialogOpen] = useState(false);
@@ -28,12 +36,12 @@ export default function DashboardScreen() {
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 1500);
   }, []);
-  if(isLoading){
-    <DashboardSkeleton/>
+  if (isLoading) {
+    <DashboardSkeleton />
   }
   const attendancePercentage = Math.round(
-  ((AdminStats?.present_count || 0) / (AdminStats?.employee_count || 1)) * 100
-);
+    ((AdminStats?.present_count || 0) / (AdminStats?.employee_count || 1)) * 100
+  );
 
   // Stats data
   const stats: Array<{
@@ -43,81 +51,85 @@ export default function DashboardScreen() {
     color: string;
     onPress?: () => void;
   }> = [
-    {
-      title: "Total Employees",
-      value: AdminStats?.employee_count||0,
-      icon: "people-outline",
-      color: "#10b981",
-    },
-    {
-      title: "Present Today",
-      value: AdminStats?.present_count||0,
-      icon: "checkmark-circle-outline",
-      color: "#10b981",
-      onPress: () => setPresentDialogOpen(true),
-    },
-    {
-      title: "Absent Today",
-      value: AdminStats?.absent_count||0,
-      icon: "close-circle-outline",
-      color: "#10b981",
-      onPress: () => setAbsentDialogOpen(true),
-    },
-    {
-      title: "Pending Leaves",
-      value: AdminStats?.pending_leave_requests||0,
-      icon: "document-text-outline",
-      color: "#10b981",
-    },
-  ];
+      {
+        title: "Total Employees",
+        value: AdminStats?.employee_count || 0,
+        icon: "people-outline",
+        color: "#10b981",
+      },
+      {
+        title: "Present Today",
+        value: AdminStats?.present_count || 0,
+        icon: "checkmark-circle-outline",
+        color: "#10b981",
+        onPress: () => setPresentDialogOpen(true),
+      },
+      {
+        title: "Absent Today",
+        value: AdminStats?.absent_count || 0,
+        icon: "close-circle-outline",
+        color: "#10b981",
+        onPress: () => setAbsentDialogOpen(true),
+      },
+      {
+        title: "Pending Leaves",
+        value: AdminStats?.pending_leave_requests || 0,
+        icon: "document-text-outline",
+        color: "#10b981",
+      },
+    ];
 
   // Feature cards
   const features: Array<{
     title: string;
     description: string;
     icon: keyof typeof Ionicons.glyphMap;
+    link: string;
   }> = [
-    {
-      title: "Attendance",
-      description: "Track employee attendance",
-      icon: "calendar-outline",
-    },
-    {
-      title: "Leave Requests",
-      description: "Handle leave requests",
-      icon: "calendar-number-outline",
-    },
-    {
-      title: "Job Openings",
-      description: "Manage job postings",
-      icon: "briefcase-outline",
-    },
-    {
-      title: "My Profile",
-      description: "Manage your profile",
-      icon: "person-circle-outline",
-    },
-    {
-      title: "Announcements",
-      description: "Company announcements",
-      icon: "megaphone-outline",
-    },
-    {
-      title: "Holidays",
-      description: "Manage holidays here",
-      icon: "business-outline",
-    },
-    {
-      title: "Employee Salary",
-      description: "Manage employee salary",
-      icon: "wallet-outline",
-    },
-    {
-      title: "Organization",
-      description: "View company structure",
-      icon: "git-network-outline",
-    },
-  ];
+      {
+        title: "Attendance",
+        description: "Track employee attendance",
+        icon: "calendar-outline",
+        link: "/(tabs)/Attendance",
+      },
+      {
+        title: "Leave Requests",
+        description: "Handle leave requests",
+        icon: "calendar-number-outline",
+        link: "/(tabs)/Leaves",
+      },
+      // {
+      //   title: "Job Openings",
+      //   description: "Manage job postings",
+      //   icon: "briefcase-outline",
+      // },
+      {
+        title: "My Profile",
+        description: "Manage your profile",
+        icon: "person-circle-outline",
+        link: "/(tabs)/Profile",
+      },
+      // {
+      //   title: "Announcements",
+      //   description: "Company announcements",
+      //   icon: "megaphone-outline",
+      // },
+      // {
+      //   title: "Holidays",
+      //   description: "Manage holidays here",
+      //   icon: "business-outline",
+      // },
+      // {
+      //   title: "Employee Salary",
+      //   description: "Manage employee salary",
+      //   icon: "wallet-outline",
+      // },
+      // {
+      //   title: "Organization",
+      //   description: "View company structure",
+      //   icon: "git-network-outline",
+      // },
+    ];
 
   const getFormattedDate = () => {
     return new Date().toLocaleDateString("en-US", {
@@ -218,6 +230,7 @@ export default function DashboardScreen() {
       <View style={styles.featuresContainer}>
         {features.map((item, index) => (
           <TouchableOpacity
+            onPress={() => { router.replace(item.link as any) }}
             key={index}
             activeOpacity={0.8}
             style={[
@@ -337,13 +350,47 @@ export default function DashboardScreen() {
             Announcements
           </Text>
         </View>
-        <Text style={[styles.emptyText, { color: isDark ? "#9ca3af" : "#6b7280" }]}>
-          No announcements available
-        </Text>
+
+        <View style={styles.announcementsList}>
+          {(announcements?.length === 0 || announcements === undefined) && (<Text style={[styles.eventTitle, { color: isDark ? "#fff" : "#111" }]}>
+            No announcements yet
+          </Text>)}
+          {announcements?.map((announcement, index) => (
+            <View
+              key={index}
+              style={[
+                styles.announcementItem,
+                {
+                  backgroundColor: isDark ? "rgba(16, 185, 129, 0.1)" : "rgba(16, 185, 129, 0.05)",
+                  borderColor: isDark ? "#374151" : "#e5e7eb",
+                },
+              ]}
+            >
+              <View style={styles.announcementBadge}>
+                <MaterialCommunityIcons
+                  name="bell-outline"
+                  size={16}
+                  color="#10b981"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.announcementTitle, { color: isDark ? "#fff" : "#111" }]}>
+                  {announcement.title}
+                </Text>
+                <Text style={[styles.announcementDesc, { color: isDark ? "#9ca3af" : "#6b7280" }]}>
+                  {announcement.message}
+                </Text>
+                <Text style={[styles.announcementTime, { color: isDark ? "#6b7280" : "#9ca3af" }]}>
+                  {announcement.created_by_name}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
       </View>
 
       {/* RECENT LEAVE REQUESTS */}
-      <View
+      {/* <View
         style={[
           styles.bigCard,
           {
@@ -371,7 +418,7 @@ export default function DashboardScreen() {
         <Text style={[styles.emptyText, { color: isDark ? "#9ca3af" : "#6b7280" }]}>
           No leave requests found
         </Text>
-      </View>
+      </View> */}
 
       {/* UPCOMING BIRTHDAYS */}
       <View
@@ -385,7 +432,7 @@ export default function DashboardScreen() {
       >
         <View style={styles.cardHeader}>
           <MaterialCommunityIcons
-            name="gift-outline"
+            name="calendar-month-outline"
             size={20}
             color="#10b981"
             style={{ marginRight: 8 }}
@@ -399,9 +446,66 @@ export default function DashboardScreen() {
             Upcoming Birthdays
           </Text>
         </View>
-        <Text style={[styles.emptyText, { color: isDark ? "#9ca3af" : "#6b7280" }]}>
-          No birthdays this week
-        </Text>
+
+        <View style={styles.eventsList}>
+          {upcomingEvents.length === 0 && (<Text style={[styles.eventTitle, { color: isDark ? "#fff" : "#111" }]}>
+            {"No more birthdays this month"}
+          </Text>)}
+          {upcomingEvents.map((event, index) => (
+            <View
+              key={index}
+              style={[
+                styles.eventItem,
+                {
+                  borderBottomColor: isDark ? "#374151" : "#e5e7eb",
+                  borderBottomWidth: index < upcomingEvents.length - 1 ? 1 : 0,
+                },
+              ]}
+            >
+              <View style={styles.eventIcon}>
+                <Image
+                  src={event?.profile_image_url || "/images/avatar.jpg"}
+                  height={20}
+                  width={20}
+                // color="#10b981"
+                />
+              </View>
+              <View style={styles.eventContent}>
+                <Text style={[styles.eventTitle, { color: isDark ? "#fff" : "#111" }]}>
+                  {event.first_name}{" "}{event.last_name}
+                </Text>
+                <Text style={[styles.eventDate, { color: isDark ? "#9ca3af" : "#6b7280" }]}>
+                  {event.date_of_birth}
+                </Text>
+              </View>
+              {/* <View
+                      style={[
+                        styles.eventTypeBadge,
+                        {
+                          backgroundColor:
+                            event.type === "meeting" ? "#dbeafe" :
+                              event.type === "deadline" ? "#fecaca" :
+                                "#e0e7ff",
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.eventTypeText,
+                          {
+                            color:
+                              event.type === "meeting" ? "#0284c7" :
+                                event.type === "deadline" ? "#dc2626" :
+                                  "#4338ca",
+                          },
+                        ]}
+                      >
+                        {event.type}
+                      </Text>
+                    </View> */}
+            </View>
+          ))}
+        </View>
       </View>
 
       {/* HOLIDAYS */}
@@ -430,9 +534,40 @@ export default function DashboardScreen() {
             Upcoming Holidays
           </Text>
         </View>
-        <Text style={[styles.emptyText, { color: isDark ? "#9ca3af" : "#6b7280" }]}>
-          No holidays scheduled
-        </Text>
+        {holidays && holidays.length > 0 ? (
+          holidays.map((holiday, index) => (
+            <View
+              key={index}
+              style={[
+                styles.eventItem,
+                {
+                  borderBottomColor: isDark ? "#374151" : "#e5e7eb",
+                  borderBottomWidth: index < holidays.length - 1 ? 1 : 0,
+                },
+              ]}
+            >
+              {/* <View style={styles.eventIcon}>
+                <Image
+                  src={holiday?.profile_image_url || "/images/avatar.jpg"}
+                  height={20}
+                  width={20}
+                />
+              </View> */}
+              <View style={styles.eventContent}>
+                <Text style={[styles.eventTitle, { color: isDark ? "#fff" : "#111" }]}>
+                  {holiday.occasion}
+                </Text>
+                <Text style={[styles.eventDate, { color: isDark ? "#9ca3af" : "#6b7280" }]}>
+                  {holiday.date}
+                </Text>
+              </View>
+            </View>
+          ))
+        ) : (
+          <Text style={[styles.emptyText, { color: isDark ? "#9ca3af" : "#6b7280" }]}>
+            No holidays scheduled
+          </Text>
+        )}
       </View>
 
       {/* Bottom padding */}
@@ -457,6 +592,45 @@ const styles = StyleSheet.create({
 
   headerContent: {
     gap: 8,
+  },
+  // Announcements List
+  announcementsList: {
+    gap: 12,
+  },
+
+  announcementItem: {
+    borderRadius: 12,
+    padding: 14,
+    flexDirection: "row",
+    gap: 12,
+    borderWidth: 1,
+  },
+
+  announcementBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: "rgba(16, 185, 129, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 2,
+  },
+
+  announcementTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+
+  announcementDesc: {
+    fontSize: 11,
+    fontWeight: "400",
+    marginBottom: 6,
+  },
+
+  announcementTime: {
+    fontSize: 10,
+    fontWeight: "400",
   },
 
   welcomeTitle: {
@@ -497,6 +671,53 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+
+  eventsList: {
+    gap: 0,
+  },
+
+  eventItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    gap: 12,
+  },
+
+  eventIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "rgba(16, 185, 129, 0.1)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  eventContent: {
+    flex: 1,
+  },
+
+  eventTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+
+  eventDate: {
+    fontSize: 11,
+    fontWeight: "400",
+  },
+
+  eventTypeBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+
+  eventTypeText: {
+    fontSize: 10,
+    fontWeight: "600",
+    textTransform: "capitalize",
   },
 
   iconCircle: {
