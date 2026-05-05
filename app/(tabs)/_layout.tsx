@@ -207,29 +207,29 @@ export default function TabLayout() {
           }}
         />
 
-        <Tabs.Screen
+        {/* <Tabs.Screen
           name="Attendance"
           options={{
             title: 'Attendance',
             tabBarIcon: ({ color }) => <TabBarIcon name="check-circle" color={color} />,
           }}
-        />
+        /> */}
 
-        <Tabs.Screen
+        {/* <Tabs.Screen
           name="View Attendance"
           options={{
             title: 'View Attendance',
             tabBarIcon: ({ color }) => <TabBarIcon name="clock-o" color={color} />,
           }}
-        />
+        /> */}
 
-        <Tabs.Screen
+        {/* <Tabs.Screen
           name="Leaves"
           options={{
             title: 'Leaves',
             tabBarIcon: ({ color }) => <TabBarIcon name="plane" color={color} />,
           }}
-        />
+        /> */}
 
         <Tabs.Screen
           name="Chats"

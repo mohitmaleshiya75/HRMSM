@@ -154,9 +154,9 @@ export default function LoginForm() {
             </View>
 
             {/* Forgot Password */}
-            <TouchableOpacity style={styles.forgotWrap}>
+            {/* <TouchableOpacity style={styles.forgotWrap}>
               <Text style={styles.forgotText}>Forgot Password?</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
 
             {/* Login Button */}
             <TouchableOpacity
@@ -178,19 +178,19 @@ export default function LoginForm() {
             </TouchableOpacity>
 
             {/* Divider */}
-            <View style={styles.dividerRow}>
+            {/* <View style={styles.dividerRow}>
               <View style={styles.dividerLine} />
               <Text style={styles.dividerText}>or</Text>
               <View style={styles.dividerLine} />
-            </View>
+            </View> */}
 
             {/* Sign-up nudge */}
-            <View style={styles.signupRow}>
+            {/* <View style={styles.signupRow}>
               <Text style={styles.signupPrompt}>Don't have an account? </Text>
               <TouchableOpacity>
                 <Text style={styles.signupLink}>Contact Admin</Text>
               </TouchableOpacity>
-            </View>
+            </View> */}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
