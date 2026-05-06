@@ -2,7 +2,7 @@
   "expo": {
     "name": "HRMSM",
     "slug": "HRMSM",
-    "version": "1.0.8",
+    "version": "1.0.9",
     "orientation": "portrait",
     "icon": "./assets/images/icon.jpg",
     "scheme": "hrmsm",
@@ -20,7 +20,7 @@
     },
     "android": {
       "package": "com.hrmsm.app",
-      "versionCode": 9,
+      "versionCode": 10,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.jpg",
         "backgroundColor": "#ffffff"
@@ -42,12 +42,16 @@
     "plugins": [
       [
         "expo-router",
-        { "unstable_useServerMiddleware": true }
+        {
+          "unstable_useServerMiddleware": true
+        }
       ],
       [
         "expo-notifications",
         {
-          "sounds": ["./assets/sounds/notification.wav"]
+          "sounds": [
+            "./assets/sounds/notification.wav"
+          ]
         }
       ]
     ],
@@ -59,9 +63,9 @@
         "unstable_useServerMiddleware": true
       },
       "eas": {
-        "projectId": "bf36ef80-b827-421a-bee4-e9071b8a039a"
+        "projectId": "4b034290-1197-4718-aca1-7a949748c8a6"
       }
     },
-    "owner": "hrmsm1"
+    "owner": "hrmsm2"
   }
 }
