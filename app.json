@@ -20,7 +20,7 @@
     },
     "android": {
       "package": "com.hrmsm.app",
-      "versionCode": 10,
+      "versionCode": 12,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.jpg",
         "backgroundColor": "#ffffff"
@@ -61,11 +61,8 @@
     "extra": {
       "router": {
         "unstable_useServerMiddleware": true
-      },
-      "eas": {
-        "projectId": "4b034290-1197-4718-aca1-7a949748c8a6"
       }
     },
-    "owner": "hrmsm1"
+    "owner": "yirica1644"
   }
 }
