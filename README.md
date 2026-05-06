@@ -4,4 +4,4 @@
 
 // "version": "1.0.01" (update here for current version)
 
-// "versionCode": 2 (here also)
+// "versionCode": 7 (here also)

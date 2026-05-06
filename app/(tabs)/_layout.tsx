@@ -39,7 +39,7 @@ async function fetchUnreadCountFromApi(token: string): Promise<number> {
     return 0;
   }
 
-  const response = await fetch(`${API_BASE_URL}/notifications/unread-count/`, { // Added trailing slash
+  const response = await fetch(`${API_BASE_URL}/accounts/notifications/unread-count/`, { // Added trailing slash
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,

@@ -67,6 +67,12 @@ registerFCMToken: (token: string, platform: 'android' | 'ios') =>
     body: JSON.stringify({ token, platform }),
   }),
 
+  registerExpoToken: (token: string) =>
+  req('/expo-token/', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  }),
+
 unregisterFCMToken: (token: string) =>
   req('/fcm-token/delete/', {
     method: 'DELETE',
@@ -74,3 +80,4 @@ unregisterFCMToken: (token: string) =>
   }),
   };
 }
+

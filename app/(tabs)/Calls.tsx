@@ -1,70 +1,33 @@
-/**
- * Calls.tsx — React Native Audio / Video Calling
- * Requires a custom dev build (expo run:android / expo run:ios)
- * Will NOT work in Expo Go.
- */
 
-// ─────────────────────── WebRTC globals (must run first) ─────────────────────
 let mediaDevices: any;
 let RTCView: any;
 let _PC: any, _SDP: any, _ICE: any, _MS: any;
 
 console.log('[Calls:BOOT] ═══ Module loading — top of file ═══');
-console.log('[Calls:BOOT] Platform check starting…');
-
 try {
-  console.log('[Calls:BOOT] Attempting require("react-native-webrtc")…');
   const webrtc = require('react-native-webrtc');
-  console.log('[Calls:BOOT] react-native-webrtc loaded. Keys:', Object.keys(webrtc).join(', '));
   mediaDevices = webrtc.mediaDevices;
   RTCView      = webrtc.RTCView;
   _PC          = webrtc.RTCPeerConnection;
   _SDP         = webrtc.RTCSessionDescription;
   _ICE         = webrtc.RTCIceCandidate;
   _MS          = webrtc.MediaStream;
-  console.log('[Calls:BOOT] WebRTC globals assigned:',
-    'mediaDevices=', !!mediaDevices,
-    'RTCView=', !!RTCView,
-    'PC=', !!_PC,
-    'SDP=', !!_SDP,
-    'ICE=', !!_ICE,
-    'MS=', !!_MS,
-  );
+  console.log('[Calls:BOOT] WebRTC loaded OK');
 } catch (e: any) {
-  console.error('[Calls:BOOT] ❌ react-native-webrtc FAILED to load:', e?.message ?? e);
-  console.error('[Calls:BOOT] Stack:', e?.stack ?? 'no stack');
+  console.error('[Calls:BOOT] react-native-webrtc FAILED:', e?.message);
 }
 
-// Polyfill for peerjs — MUST happen before 'peerjs' is imported
-console.log('[Calls:BOOT] Patching WebRTC globals onto global…');
 (function patchWebRTCGlobals() {
-  if (typeof global === 'undefined') {
-    console.warn('[Calls:BOOT] global is undefined — skipping patch');
-    return;
-  }
+  if (typeof global === 'undefined') return;
   const g = global as Record<string, unknown>;
-  const before = {
-    PC:  !!g.RTCPeerConnection,
-    SDP: !!g.RTCSessionDescription,
-    ICE: !!g.RTCIceCandidate,
-    MS:  !!g.MediaStream,
-  };
   if (_PC  && !g.RTCPeerConnection)     g.RTCPeerConnection     = _PC;
   if (_SDP && !g.RTCSessionDescription) g.RTCSessionDescription = _SDP;
   if (_ICE && !g.RTCIceCandidate)       g.RTCIceCandidate       = _ICE;
   if (_MS  && !g.MediaStream)           g.MediaStream           = _MS;
-  console.log('[Calls:BOOT] Global patch complete.',
-    'Before:', JSON.stringify(before),
-    'After: PC=', !!g.RTCPeerConnection,
-    'SDP=', !!g.RTCSessionDescription,
-    'ICE=', !!g.RTCIceCandidate,
-    'MS=', !!g.MediaStream,
-  );
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-console.log('[Calls:BOOT] Starting React + RN imports…');
 import React, {
   useState, useEffect, useRef, useCallback, useMemo,
 } from 'react';
@@ -72,45 +35,41 @@ import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
   TextInput, Alert, Platform, Dimensions, SafeAreaView,
   ActivityIndicator, Modal, Vibration, StatusBar,
-  BackHandler, ScrollView,
-  AppState, type AppStateStatus,
+  BackHandler, ScrollView, AppState, type AppStateStatus,
 } from 'react-native';
-console.log('[Calls:BOOT] React Native imports OK');
+import { Ionicons } from '@expo/vector-icons';
 
 let Peer: any = null;
 try {
-  console.log('[Calls:BOOT] Attempting require("peerjs")…');
   const peerModule = require('peerjs');
   Peer = peerModule.default ?? peerModule.Peer ?? peerModule;
   console.log('[Calls:BOOT] peerjs loaded. Type:', typeof Peer);
 } catch (e: any) {
-  console.error('[Calls:BOOT] ❌ peerjs FAILED to load:', e?.message ?? e);
-  console.error('[Calls:BOOT] Stack:', e?.stack ?? 'no stack');
+  console.error('[Calls:BOOT] peerjs FAILED:', e?.message);
 }
 
 import type { MediaConnection, DataConnection } from 'peerjs';
 
 let InCallManager: any = null;
 try {
-  console.log('[Calls:BOOT] Attempting require("react-native-incall-manager")…');
   InCallManager = require('react-native-incall-manager').default;
-  console.log('[Calls:BOOT] InCallManager loaded:', !!InCallManager);
 } catch (e: any) {
-  console.error('[Calls:BOOT] ❌ react-native-incall-manager FAILED:', e?.message ?? e);
+  console.error('[Calls:BOOT] react-native-incall-manager FAILED:', e?.message);
 }
+
+// Expo notifications for push (background/killed app incoming calls)
+let Notifications: any = null;
+try {
+  Notifications = require('expo-notifications');
+} catch {}
 
 import useCurrentUser from '@/features/auth/hooks/useCurrentUser';
 import { useEmployeeHierarchy, type Employee } from '@/services/call';
-
-console.log('[Calls:BOOT] ✅ All imports done');
-console.log('[Calls:BOOT] Summary — RTCView:', !!RTCView, '| mediaDevices:', !!mediaDevices, '| Peer:', !!Peer, '| InCallManager:', !!InCallManager);
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const PEER_HOST = process.env.EXPO_PUBLIC_PEER_HOST ?? '0.peerjs.com';
 const PEER_PORT = Number(process.env.EXPO_PUBLIC_PEER_PORT ?? 443);
 const PEER_PATH = process.env.EXPO_PUBLIC_PEER_PATH ?? '/';
-
-console.log('[Calls:CONFIG] PEER_HOST:', PEER_HOST, '| PEER_PORT:', PEER_PORT, '| PEER_PATH:', PEER_PATH);
 
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -119,7 +78,6 @@ const ICE_SERVERS = [
 ];
 
 const { width: SW, height: SH } = Dimensions.get('window');
-console.log('[Calls:CONFIG] Screen:', SW, 'x', SH);
 
 const COLORS = [
   '#3b5bdb','#7048e8','#d6336c','#0c8599',
@@ -187,9 +145,63 @@ const fmt = (s: number) =>
 
 // ─── Vibration ring ───────────────────────────────────────────────────────────
 const ringVibration = {
-  start: () => { console.log('[Calls:RING] Starting vibration'); Vibration.vibrate([0, 700, 500, 700, 500, 700], true); },
-  stop:  () => { console.log('[Calls:RING] Stopping vibration'); Vibration.cancel(); },
+  start: () => Vibration.vibrate([0, 700, 500, 700, 500, 700], true),
+  stop:  () => Vibration.cancel(),
 };
+
+// ─── Push notification helpers ────────────────────────────────────────────────
+async function registerForPushNotifications(): Promise<string | null> {
+  if (!Notifications) return null;
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') return null;
+    // For production: use getExpoPushTokenAsync({ projectId: 'your-project-id' })
+    const token = await Notifications.getDevicePushTokenAsync().catch(() => null);
+    return token?.data ?? null;
+  } catch (e: any) {
+    console.warn('[Calls:PUSH] registerForPushNotifications failed:', e?.message);
+    return null;
+  }
+}
+
+async function showIncomingCallNotification(callerName: string, mode: CallMode) {
+  if (!Notifications) return;
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: `Incoming ${mode === 'video' ? 'Video' : 'Voice'} Call`,
+        body: `${callerName} is calling you`,
+        sound: true,
+        priority: Notifications.AndroidNotificationPriority?.MAX ?? 'max',
+        vibrate: [0, 500, 200, 500],
+        categoryIdentifier: 'incoming_call',
+        data: { type: 'incoming_call', callerName, mode },
+      },
+      trigger: null, // immediate
+    });
+  } catch (e: any) {
+    console.warn('[Calls:PUSH] showIncomingCallNotification failed:', e?.message);
+  }
+}
+
+async function dismissCallNotification() {
+  if (!Notifications) return;
+  try {
+    await Notifications.dismissAllNotificationsAsync();
+  } catch {}
+}
 
 // ─── Error Boundary ───────────────────────────────────────────────────────────
 class CallsErrorBoundary extends React.Component<
@@ -197,46 +209,29 @@ class CallsErrorBoundary extends React.Component<
   { error: string | null; errorInfo: string | null }
 > {
   state = { error: null, errorInfo: null };
-
   static getDerivedStateFromError(e: Error) {
-    console.error('[Calls:BOUNDARY] ❌ React error caught:', e?.message);
     return { error: e?.message ?? String(e), errorInfo: null };
   }
-
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error('[Calls:BOUNDARY] ❌ componentDidCatch:', error?.message);
-    console.error('[Calls:BOUNDARY] Component stack:', info?.componentStack);
     this.setState({ errorInfo: info?.componentStack ?? null });
   }
-
   render() {
     if (this.state.error) {
       return (
         <SafeAreaView style={{ flex: 1, backgroundColor: '#080810', padding: 24, justifyContent: 'center' }}>
           <Text style={{ color: '#ed4245', fontSize: 18, fontWeight: '800', marginBottom: 12 }}>
-            ❌ Calls Crashed
+            Calls Crashed
           </Text>
-          <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, marginBottom: 8, fontWeight: '600' }}>
-            Error:
-          </Text>
-          <Text style={{ color: '#ff9999', fontSize: 12, marginBottom: 16, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
+          <Text style={{ color: '#ff9999', fontSize: 12, marginBottom: 16 }}>
             {this.state.error}
           </Text>
           {this.state.errorInfo && (
-            <>
-              <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: '600', marginBottom: 4 }}>
-                Component stack:
+            <ScrollView style={{ maxHeight: 200 }}>
+              <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10 }}>
+                {this.state.errorInfo}
               </Text>
-              <ScrollView style={{ maxHeight: 200 }}>
-                <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
-                  {this.state.errorInfo}
-                </Text>
-              </ScrollView>
-            </>
+            </ScrollView>
           )}
-          <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 16 }}>
-            Check adb logcat for [Calls:*] tags
-          </Text>
         </SafeAreaView>
       );
     }
@@ -271,17 +266,21 @@ function NetBadge({ quality }: { quality: NetQuality }) {
 
 // ─── CtrlBtn ──────────────────────────────────────────────────────────────────
 function CtrlBtn({
-  label, icon, onPress, active = false, danger = false, large = false, disabled = false,
+  label, iconName, onPress, active = false, danger = false, large = false, disabled = false,
 }: {
-  label: string; icon: string; onPress: () => void;
+  label: string;
+  iconName: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
   active?: boolean; danger?: boolean; large?: boolean; disabled?: boolean;
 }) {
-  const bg = danger ? '#ed4245' : active ? 'rgba(88,101,242,0.28)' : 'rgba(255,255,255,0.1)';
-  const sz = large ? 58 : 46;
+  const bg = danger ? '#ed4245' : active ? 'rgba(88,101,242,0.35)' : 'rgba(255,255,255,0.12)';
+  const sz = large ? 58 : 48;
+  const iconSize = large ? 24 : 20;
+  const iconColor = danger ? '#fff' : active ? '#818cf8' : '#fff';
   return (
     <TouchableOpacity style={s.ctrlWrap} onPress={onPress} disabled={disabled} activeOpacity={0.75}>
       <View style={[s.ctrlBtn, { width: sz, height: sz, borderRadius: sz / 2, backgroundColor: bg, opacity: disabled ? 0.4 : 1 }]}>
-        <Text style={[s.ctrlIcon, danger && { color: '#fff' }, active && { color: '#818cf8' }]}>{icon}</Text>
+        <Ionicons name={iconName} size={iconSize} color={iconColor} />
       </View>
       <Text style={s.ctrlLabel}>{label}</Text>
     </TouchableOpacity>
@@ -290,20 +289,16 @@ function CtrlBtn({
 
 // ─── Unavailable screen ───────────────────────────────────────────────────────
 function UnavailableScreen({ reason }: { reason: string }) {
-  console.warn('[Calls:UNAVAILABLE] Showing unavailable screen. Reason:', reason);
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#080810', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
-      <Text style={{ fontSize: 48, marginBottom: 16 }}>📵</Text>
-      <Text style={{ fontSize: 20, fontWeight: '800', color: '#fff', marginBottom: 8, textAlign: 'center' }}>
+      <Ionicons name="phone-portrait-outline" size={52} color="rgba(255,255,255,0.3)" />
+      <Text style={{ fontSize: 20, fontWeight: '800', color: '#fff', marginTop: 16, marginBottom: 8, textAlign: 'center' }}>
         Dev Build Required
       </Text>
-      <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', textAlign: 'center', lineHeight: 22 }}>
-        Calls require native WebRTC modules not available in Expo Go.{'\n\n'}
-        Reason: <Text style={{ color: '#ed4245' }}>{reason}</Text>{'\n\n'}
-        Run:{'\n'}
-        <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', color: '#818cf8' }}>
-          expo run:android{'\n'}expo run:ios
-        </Text>
+      <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', textAlign: 'center', lineHeight: 22 }}>
+        Calls require native WebRTC modules.{'\n\n'}
+        Reason: {reason}{'\n\n'}
+        Run:{'\n'}expo run:android  /  expo run:ios
       </Text>
     </SafeAreaView>
   );
@@ -319,18 +314,27 @@ function IncomingCallModal({ incoming, onAccept, onDecline }: {
     <Modal transparent animationType="fade" visible statusBarTranslucent>
       <View style={s.incomingBg}>
         <View style={s.incomingCard}>
-          <Text style={s.incomingLabel}>
-            {incoming.mode === 'video' ? '📹 Incoming Video Call' : '🎙️ Incoming Voice Call'}
-          </Text>
-          <Avatar name={incoming.name} size={80} />
+          <View style={s.incomingIconRow}>
+            <Ionicons
+              name={incoming.mode === 'video' ? 'videocam' : 'call'}
+              size={18}
+              color="#818cf8"
+            />
+            <Text style={s.incomingLabel}>
+              {incoming.mode === 'video' ? 'Incoming Video Call' : 'Incoming Voice Call'}
+            </Text>
+          </View>
+          <Avatar name={incoming.name} size={84} />
           <Text style={s.incomingName}>{incoming.name}</Text>
-          <Text style={s.incomingHint}>Press Accept or Decline</Text>
+          <Text style={s.incomingHint}>Tap Accept or Decline</Text>
           <View style={s.incomingActions}>
             <TouchableOpacity style={[s.incomingBtn, s.declineBtn]} onPress={onDecline} activeOpacity={0.8}>
-              <Text style={s.incomingBtnText}>📵  Decline</Text>
+              <Ionicons name="call" size={22} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
+              <Text style={s.incomingBtnText}>Decline</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[s.incomingBtn, s.acceptBtn]} onPress={onAccept} activeOpacity={0.8}>
-              <Text style={s.incomingBtnText}>📞  Accept</Text>
+              <Ionicons name="call" size={22} color="#fff" />
+              <Text style={s.incomingBtnText}>Accept</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -339,7 +343,7 @@ function IncomingCallModal({ incoming, onAccept, onDecline }: {
   );
 }
 
-// ─── Video tile ───────────────────────────────────────────────────────────────
+// ─── Video tile (tap = spotlight) ────────────────────────────────────────────
 function VideoTile({
   stream, name, isLocal, videoOff, muted, netQuality,
   isSpotlit, isSharing, onPress, onRemove, amInitiator, frontCamera,
@@ -355,8 +359,7 @@ function VideoTile({
     <TouchableOpacity
       activeOpacity={0.9}
       onPress={onPress}
-      style={[s.videoTile, { width: tileWidth, height: tileHeight },
-        isSpotlit && s.videoTileSpotlit]}
+      style={[s.videoTile, { width: tileWidth, height: tileHeight }, isSpotlit && s.videoTileSpotlit]}
     >
       {showVideo ? (
         <RTCView
@@ -375,21 +378,29 @@ function VideoTile({
 
       <View style={s.tileBadges}>
         <NetBadge quality={netQuality} />
-        {isSpotlit && <View style={s.pinBadge}><Text style={s.pinBadgeTxt}>PIN</Text></View>}
-        {isSharing && <View style={[s.pinBadge, { backgroundColor: '#5865f2' }]}><Text style={s.pinBadgeTxt}>SCREEN</Text></View>}
+        {isSpotlit && (
+          <View style={s.pinBadge}>
+            <Text style={s.pinBadgeTxt}>PIN</Text>
+          </View>
+        )}
+        {isSharing && (
+          <View style={[s.pinBadge, { backgroundColor: '#5865f2' }]}>
+            <Text style={s.pinBadgeTxt}>SCREEN</Text>
+          </View>
+        )}
       </View>
 
       {!isLocal && amInitiator && onRemove && (
         <TouchableOpacity style={s.tileRemoveBtn} onPress={onRemove}>
-          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>✕</Text>
+          <Ionicons name="close" size={12} color="#fff" />
         </TouchableOpacity>
       )}
 
       <View style={s.tileOverlay}>
         <Text style={s.tileName} numberOfLines={1}>{isLocal ? 'You' : name}</Text>
         <View style={{ flexDirection: 'row', gap: 4 }}>
-          {muted    && <View style={s.tileIconRed}><Text style={{ fontSize: 9, color: '#fff' }}>🔇</Text></View>}
-          {videoOff && <View style={s.tileIconRed}><Text style={{ fontSize: 9, color: '#fff' }}>📷</Text></View>}
+          {muted    && <View style={s.tileIconRed}><Ionicons name="mic-off" size={9} color="#fff" /></View>}
+          {videoOff && <View style={s.tileIconRed}><Ionicons name="videocam-off" size={9} color="#fff" /></View>}
         </View>
       </View>
     </TouchableOpacity>
@@ -408,10 +419,10 @@ function AudioCircle({
         <Avatar name={name} size={72} />
       </View>
       <Text style={s.audioName} numberOfLines={1}>{name}</Text>
-      {muted && <Text style={{ fontSize: 10, color: '#ed4245' }}>🔇</Text>}
+      {muted && <Ionicons name="mic-off" size={12} color="#ed4245" />}
       {amInitiator && onRemove && (
         <TouchableOpacity style={s.audioRemove} onPress={onRemove}>
-          <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>✕</Text>
+          <Ionicons name="close" size={12} color="#fff" />
         </TouchableOpacity>
       )}
     </View>
@@ -422,18 +433,9 @@ function AudioCircle({
 //  Main Calls Component
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Calls() {
-  console.log('[Calls:RENDER] Calls() root render — RTCView:', !!RTCView, '| mediaDevices:', !!mediaDevices, '| Peer:', !!Peer);
-
-  if (!RTCView) {
-    return <UnavailableScreen reason="RTCView is null (react-native-webrtc not loaded)" />;
-  }
-  if (!mediaDevices) {
-    return <UnavailableScreen reason="mediaDevices is null (react-native-webrtc not loaded)" />;
-  }
-  if (!Peer) {
-    return <UnavailableScreen reason="Peer is null (peerjs failed to load)" />;
-  }
-
+  if (!RTCView) return <UnavailableScreen reason="RTCView is null (react-native-webrtc not loaded)" />;
+  if (!mediaDevices) return <UnavailableScreen reason="mediaDevices is null" />;
+  if (!Peer) return <UnavailableScreen reason="Peer is null (peerjs failed to load)" />;
   return (
     <CallsErrorBoundary>
       <CallsInner />
@@ -443,37 +445,24 @@ export default function Calls() {
 
 // ─── Inner component ──────────────────────────────────────────────────────────
 function CallsInner() {
-  console.log('[Calls:INNER] CallsInner() mounting…');
-
   const { data: currentUser } = useCurrentUser();
   const { employees: allEmployees, isLoading: empLoading } = useEmployeeHierarchy();
 
   const myName = useMemo(() => {
     const u = currentUser as Record<string, unknown> | undefined;
-    const name = (u?.full_name ?? u?.name ??
-      `${u?.first_name ?? ''} ${u?.last_name ?? ''}`.trim() ?? 'Me') as string;
-    console.log('[Calls:USER] myName resolved:', name);
-    return name;
+    return ((u?.full_name ?? u?.name ??
+      `${u?.first_name ?? ''} ${u?.last_name ?? ''}`.trim() ?? 'Me') as string);
   }, [currentUser]);
 
   const myId     = String((currentUser as Record<string, unknown> | undefined)?.id ?? '');
   const myPeerId = `u-${myId}`;
-
-  useEffect(() => {
-    console.log('[Calls:USER] currentUser changed. id:', myId, '| peerId:', myPeerId, '| name:', myName);
-    console.log('[Calls:USER] currentUser keys:', currentUser ? Object.keys(currentUser as object).join(', ') : 'null');
-  }, [currentUser, myId, myPeerId, myName]);
-
-  useEffect(() => {
-    console.log('[Calls:EMPLOYEES] allEmployees count:', allEmployees.length, '| loading:', empLoading);
-  }, [allEmployees, empLoading]);
 
   const callPeople = useMemo(
     () => allEmployees.filter(e => String(e.id) !== myId),
     [allEmployees, myId],
   );
 
-  const [view,     setView]    = useState<AppView>('home');
+  const [view,     setView]     = useState<AppView>('home');
   const [callMode, setCallMode] = useState<CallMode>('audio');
 
   const [peer,      setPeer]      = useState<any | null>(null);
@@ -511,54 +500,76 @@ function CallsInner() {
   const callModeRef        = useRef<CallMode>('audio');
   const inCallRef          = useRef(false);
   const initiatorPeerIdRef = useRef<string | null>(null);
+  // FIX: track whether we're in the middle of accepting to prevent race conditions
+  const acceptingRef       = useRef(false);
   const resetCallStateRef  = useRef<() => void>(() => {});
   const setupMediaConnRef  = useRef<(c: MediaConnection, pid: string, uid: number, name: string, out: boolean) => void>(() => {});
 
-  useEffect(() => { micMutedRef.current        = micMuted;       }, [micMuted]);
-  useEffect(() => { cameraOffRef.current       = cameraOff;      }, [cameraOff]);
-  useEffect(() => { callModeRef.current        = callMode;       }, [callMode]);
-  useEffect(() => { inCallRef.current          = inCall;         }, [inCall]);
+  useEffect(() => { micMutedRef.current        = micMuted;        }, [micMuted]);
+  useEffect(() => { cameraOffRef.current       = cameraOff;       }, [cameraOff]);
+  useEffect(() => { callModeRef.current        = callMode;        }, [callMode]);
+  useEffect(() => { inCallRef.current          = inCall;          }, [inCall]);
   useEffect(() => { initiatorPeerIdRef.current = initiatorPeerId; }, [initiatorPeerId]);
 
   const amInitiator = initiatorPeerId === myPeerId;
 
+  // ── Push notification setup ───────────────────────────────────────────────
+  useEffect(() => {
+    registerForPushNotifications().then(token => {
+      if (token) console.log('[Calls:PUSH] Push token:', token);
+    });
+  }, []);
+
   // ── Peer init ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    console.log('[Calls:PEER] Peer init effect. myId:', myId, '| already exists:', !!peerRef.current);
-    if (!myId || myId === 'undefined') {
-      console.warn('[Calls:PEER] ⚠️ myId is empty/undefined — skipping peer init. currentUser:', JSON.stringify(currentUser));
-      return;
-    }
-    if (peerRef.current) {
-      console.log('[Calls:PEER] Peer already exists, skipping.');
-      return;
-    }
-    if (!Peer) {
-      console.error('[Calls:PEER] ❌ Peer class is null — cannot create peer');
-      return;
-    }
+    if (!myId || myId === 'undefined') return;
+    if (peerRef.current) return;
+    if (!Peer) return;
 
-    console.log('[Calls:PEER] Creating Peer:', myPeerId, '→', PEER_HOST + ':' + PEER_PORT + PEER_PATH);
+    console.log('[Calls:PEER] Creating Peer:', myPeerId);
     try {
       const p = new Peer(myPeerId, {
         host: PEER_HOST, port: PEER_PORT, path: PEER_PATH,
         secure: PEER_PORT === 443,
         config: { iceServers: ICE_SERVERS },
-        debug: 2,
+        debug: 1,
       });
-      console.log('[Calls:PEER] Peer instance created:', !!p);
 
       p.on('open', (id: string) => {
-        console.log('[Calls:PEER] ✅ Peer open. Assigned ID:', id);
+        console.log('[Calls:PEER] Peer open. ID:', id);
         setPeerReady(true);
       });
       p.on('disconnected', () => {
-        console.warn('[Calls:PEER] ⚠️ Peer disconnected. Attempting reconnect…');
+        console.warn('[Calls:PEER] Peer disconnected. Reconnecting…');
         setPeerReady(false);
-        try { p.reconnect(); } catch (e: any) { console.error('[Calls:PEER] Reconnect failed:', e?.message); }
+        try { p.reconnect(); } catch {}
       });
       p.on('error', (err: any) => {
-        console.error('[Calls:PEER] ❌ Peer error type:', err?.type, '| message:', err?.message ?? err);
+        const errType = err?.type ?? 'unknown';
+        console.error('[Calls:PEER] Peer error type:', errType, '|', err?.message);
+
+        // FIX: peer-unavailable means target not online — handle gracefully
+        if (errType === 'peer-unavailable') {
+          const msg = err?.message ?? '';
+          const match = msg.match(/peer (u-\d+)/i);
+          const failedPid = match?.[1];
+          console.warn('[Calls:PEER] peer-unavailable for:', failedPid);
+          if (failedPid && activeConnsRef.current.has(failedPid)) {
+            // Clean up the failed connection without full reset
+            ringVibration.stop();
+            setStatus(`${failedPid.replace('u-', 'User ')} is not available`);
+            // Only reset if this is the only participant
+            if (participantsRef.current.size <= 1) {
+              resetCallStateRef.current();
+            }
+          } else if (!inCallRef.current) {
+            ringVibration.stop();
+            setStatus('User is not available right now');
+            resetCallStateRef.current();
+          }
+          return; // don't set peerReady=false for this error type
+        }
+
         setPeerReady(false);
       });
       p.on('close', () => {
@@ -569,12 +580,10 @@ function CallsInner() {
       peerRef.current = p;
       setPeer(p);
     } catch (e: any) {
-      console.error('[Calls:PEER] ❌ Exception creating Peer:', e?.message);
-      console.error('[Calls:PEER] Stack:', e?.stack);
+      console.error('[Calls:PEER] Exception creating Peer:', e?.message);
     }
 
     return () => {
-      console.log('[Calls:PEER] Cleanup — destroying peer');
       try { peerRef.current?.destroy(); } catch {}
       peerRef.current = null;
     };
@@ -584,13 +593,11 @@ function CallsInner() {
   // ── Timer ─────────────────────────────────────────────────────────────────
   const startTimer = useCallback(() => {
     if (timerRef.current) return;
-    console.log('[Calls:TIMER] Starting call timer');
     setCallDuration(0);
     timerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
   }, []);
 
   const stopTimer = useCallback(() => {
-    console.log('[Calls:TIMER] Stopping call timer');
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
     setCallDuration(0);
@@ -598,42 +605,61 @@ function CallsInner() {
 
   // ── Get local media ───────────────────────────────────────────────────────
   const getMedia = useCallback(async (mode: CallMode): Promise<any> => {
-    console.log('[Calls:MEDIA] getMedia() called. mode:', mode, '| noiseSup:', noiseSup);
+    console.log('[Calls:MEDIA] getMedia() mode:', mode);
+
+    // FIX: return existing stream if already acquired for same mode
+    if (localStreamRef.current) {
+      const existingVideo = localStreamRef.current.getVideoTracks().length > 0;
+      const needVideo = mode === 'video';
+      if (existingVideo === needVideo) {
+        console.log('[Calls:MEDIA] Reusing existing stream');
+        return localStreamRef.current;
+      }
+      // Stop old stream before getting new one
+      localStreamRef.current.getTracks().forEach((t: any) => t.stop());
+      localStreamRef.current = null;
+      setLocalStream(null);
+    }
+
     const constraints: Record<string, unknown> = {
-      audio: { echoCancellation: true, noiseSuppression: noiseSup, autoGainControl: true },
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: noiseSup,
+        autoGainControl: true,
+      },
       video: mode === 'video'
         ? { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, facingMode: 'user' }
         : false,
     };
-    console.log('[Calls:MEDIA] Constraints:', JSON.stringify(constraints));
+
     try {
       const stream = await mediaDevices.getUserMedia(constraints)
-        .catch((e: any) => {
-          console.warn('[Calls:MEDIA] First getUserMedia failed:', e?.message, '— retrying with basic constraints');
+        .catch(async (e: any) => {
+          console.warn('[Calls:MEDIA] Full constraints failed:', e?.message, '— retrying basic');
           return mediaDevices.getUserMedia({ audio: true, video: mode === 'video' });
         });
-      const audioTracks = stream.getAudioTracks();
-      const videoTracks = stream.getVideoTracks();
-      console.log('[Calls:MEDIA] ✅ Stream obtained. Audio tracks:', audioTracks.length, '| Video tracks:', videoTracks.length);
+
+      console.log('[Calls:MEDIA] Stream obtained. Audio:', stream.getAudioTracks().length, 'Video:', stream.getVideoTracks().length);
       localStreamRef.current = stream;
       setLocalStream(stream);
-      audioTracks.forEach((t: any) => { t.enabled = !micMutedRef.current; });
-      if (mode === 'video') videoTracks.forEach((t: any) => { t.enabled = !cameraOffRef.current; });
+
+      // Apply current mute/video state
+      stream.getAudioTracks().forEach((t: any) => { t.enabled = !micMutedRef.current; });
+      if (mode === 'video') {
+        stream.getVideoTracks().forEach((t: any) => { t.enabled = !cameraOffRef.current; });
+      }
       return stream;
     } catch (e: any) {
-      console.error('[Calls:MEDIA] ❌ getUserMedia FAILED:', e?.message, '| name:', e?.name);
+      console.error('[Calls:MEDIA] getUserMedia FAILED:', e?.message);
       throw e;
     }
   }, [noiseSup]);
 
   // ── Broadcast ─────────────────────────────────────────────────────────────
   const broadcastToAll = useCallback((msg: MetadataMessage) => {
-    const count = participantsRef.current.size;
-    console.log('[Calls:DATA] broadcastToAll type:', msg.type, '| participants:', count);
     participantsRef.current.forEach(p => {
       if (p.dataConnection?.open) {
-        try { p.dataConnection.send(msg); }
-        catch (e: any) { console.warn('[Calls:DATA] Send failed to', p.id, ':', e?.message); }
+        try { p.dataConnection.send(msg); } catch {}
       }
     });
   }, []);
@@ -643,7 +669,7 @@ function CallsInner() {
 
   // ── Cleanup participant ───────────────────────────────────────────────────
   const cleanupParticipant = useCallback((pid: string, wasDeclined: boolean) => {
-    console.log('[Calls:CLEANUP] cleanupParticipant:', pid, '| wasDeclined:', wasDeclined, '| remaining after:', participantsRef.current.size - 1);
+    console.log('[Calls:CLEANUP] cleanupParticipant:', pid);
     activeConnsRef.current.delete(pid);
     participantsRef.current.delete(pid);
     streamReceivedRef.current.delete(pid);
@@ -651,14 +677,12 @@ function CallsInner() {
     setSpotlightId(prev => prev === pid ? null : prev);
 
     if (participantsRef.current.size === 0) {
-      console.log('[Calls:CLEANUP] No participants left — resetting call state');
       resetCallStateRef.current();
       setStatus(wasDeclined ? 'Call declined' : 'Call ended');
     } else if (initiatorPeerIdRef.current === pid) {
       const remaining = Array.from(participantsRef.current.values());
-      const newHost   = remaining[0];
+      const newHost = remaining[0];
       if (newHost) {
-        console.log('[Calls:CLEANUP] Host left — transferring host to:', newHost.id);
         setInitiatorPeerId(newHost.id);
         initiatorPeerIdRef.current = newHost.id;
         if (newHost.id === myPeerId) broadcastToAll({ type: 'hostTransfer', newHostPeerId: myPeerId });
@@ -669,23 +693,17 @@ function CallsInner() {
 
   // ── Setup data connection ─────────────────────────────────────────────────
   const setupDataConnection = useCallback((dataConn: DataConnection, pid: string) => {
-    console.log('[Calls:DATA] setupDataConnection for:', pid);
-
     dataConn.on('open', () => {
-      console.log('[Calls:DATA] Data connection OPEN to:', pid);
       if (!dataConn.open) return;
       try {
         dataConn.send({ type: 'mute',     value: micMutedRef.current  } as MetadataMessage);
         dataConn.send({ type: 'videoOff', value: cameraOffRef.current } as MetadataMessage);
-      } catch (e: any) { console.warn('[Calls:DATA] Initial send failed:', e?.message); }
+      } catch {}
     });
 
     dataConn.on('data', (data: unknown) => {
       const msg = data as MetadataMessage;
-      console.log('[Calls:DATA] Received from', pid, '— type:', msg.type);
-
       if (msg.type === 'decline') {
-        console.log('[Calls:DATA] Call declined by:', pid);
         ringVibration.stop();
         const wasDeclined = !streamReceivedRef.current.has(pid);
         if (wasDeclined) setStatus('Call declined');
@@ -693,19 +711,16 @@ function CallsInner() {
         return;
       }
       if (msg.type === 'peerLeft') {
-        console.log('[Calls:DATA] Peer left:', msg.peerId);
         if (participantsRef.current.has(msg.peerId)) cleanupParticipant(msg.peerId, false);
         return;
       }
       if (msg.type === 'hostTransfer') {
-        console.log('[Calls:DATA] Host transferred to:', msg.newHostPeerId);
         setInitiatorPeerId(msg.newHostPeerId);
         initiatorPeerIdRef.current = msg.newHostPeerId;
         return;
       }
       if (msg.type === 'kick') {
         const { peerId: kickedPid } = msg;
-        console.log('[Calls:DATA] Kick message. Target:', kickedPid, '| me:', myPeerId);
         if (kickedPid === myPeerId) {
           resetCallStateRef.current();
           setStatus('You were removed from the call');
@@ -734,10 +749,8 @@ function CallsInner() {
       }
       if (msg.type === 'newPeer') {
         const { peer: np } = msg;
-        console.log('[Calls:DATA] New peer announced:', np.peerId, np.name);
         const p = peerRef.current;
         if (np.peerId !== myPeerId && !activeConnsRef.current.has(np.peerId) && p && localStreamRef.current) {
-          console.log('[Calls:DATA] Calling new peer:', np.peerId);
           const conn = p.call(np.peerId, localStreamRef.current, {
             metadata: {
               mode: callModeRef.current, fromName: myName, fromUserId: Number(myId),
@@ -750,26 +763,25 @@ function CallsInner() {
     });
 
     dataConn.on('close', () => {
-      console.log('[Calls:DATA] Data connection CLOSED for:', pid);
       setParticipants(prev => prev.map(p => p.id === pid ? { ...p, dataConnection: undefined } : p));
     });
-
     dataConn.on('error', (e: any) => {
-      console.error('[Calls:DATA] Data connection ERROR for:', pid, '—', e?.message ?? e);
+      console.error('[Calls:DATA] Error for:', pid, e?.message);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myPeerId, myName, myId, cleanupParticipant]);
 
   // ── Reset call state ──────────────────────────────────────────────────────
   const resetCallState = useCallback(() => {
-    console.log('[Calls:RESET] resetCallState() called');
+    console.log('[Calls:RESET] resetCallState()');
+    acceptingRef.current = false;
     ringVibration.stop();
+    dismissCallNotification();
     setInCall(false);
-    localStreamRef.current?.getTracks().forEach((t: any) => { console.log('[Calls:RESET] Stopping track:', t.kind); t.stop(); });
+    localStreamRef.current?.getTracks().forEach((t: any) => t.stop());
     localStreamRef.current = null;
     setLocalStream(null);
     stopTimer();
-    console.log('[Calls:RESET] Closing', activeConnsRef.current.size, 'active connections');
     activeConnsRef.current.forEach(c => { try { c.close(); } catch {} });
     activeConnsRef.current.clear();
     participantsRef.current.forEach(p => { try { p.dataConnection?.close(); } catch {} });
@@ -785,10 +797,8 @@ function CallsInner() {
     setInitiatorPeerId(null);
     setAddSearch('');
     setAddPanelOpen(false);
-    try { InCallManager?.stop(); InCallManager?.setKeepScreenOn(false); } catch (e: any) {
-      console.warn('[Calls:RESET] InCallManager stop failed:', e?.message);
-    }
-    console.log('[Calls:RESET] ✅ Reset complete');
+    try { InCallManager?.stop(); InCallManager?.setKeepScreenOn(false); } catch {}
+    console.log('[Calls:RESET] Done');
   }, [stopTimer]);
 
   useEffect(() => { resetCallStateRef.current = resetCallState; }, [resetCallState]);
@@ -799,7 +809,7 @@ function CallsInner() {
   ) => {
     console.log('[Calls:CONN] setupMediaConnection. pid:', pid, '| name:', name, '| outgoing:', isOutgoing);
     if (activeConnsRef.current.has(pid)) {
-      console.warn('[Calls:CONN] Already have connection for:', pid, '— skipping');
+      console.warn('[Calls:CONN] Already connected to:', pid);
       return;
     }
     activeConnsRef.current.set(pid, conn);
@@ -812,7 +822,6 @@ function CallsInner() {
     setParticipants(Array.from(participantsRef.current.values()));
 
     if (peerRef.current && isOutgoing) {
-      console.log('[Calls:CONN] Opening data channel to:', pid);
       try {
         const dataConn = peerRef.current.connect(pid, { reliable: true });
         participant.dataConnection = dataConn;
@@ -820,13 +829,14 @@ function CallsInner() {
         setParticipants(Array.from(participantsRef.current.values()));
         setupDataConnection(dataConn, pid);
       } catch (e: any) {
-        console.error('[Calls:CONN] Data channel open failed:', e?.message);
+        console.error('[Calls:CONN] Data channel failed:', e?.message);
       }
     }
 
     conn.on('stream', (remoteStream: any) => {
-      const tracks = { audio: remoteStream.getAudioTracks().length, video: remoteStream.getVideoTracks().length };
-      console.log('[Calls:CONN] ✅ Remote stream received from:', pid, '| tracks:', JSON.stringify(tracks));
+      console.log('[Calls:CONN] Remote stream from:', pid,
+        '| audio:', remoteStream.getAudioTracks().length,
+        '| video:', remoteStream.getVideoTracks().length);
       streamReceivedRef.current.add(pid);
       const p = participantsRef.current.get(pid);
       if (p) {
@@ -835,18 +845,19 @@ function CallsInner() {
         setParticipants(Array.from(participantsRef.current.values()));
       }
       setStatus('Connected');
+      ringVibration.stop(); // FIX: stop ring the moment stream arrives
       if (!timerRef.current) startTimer();
     });
 
     conn.on('close', () => {
       const wasDeclined = !streamReceivedRef.current.has(pid);
-      console.log('[Calls:CONN] Connection closed for:', pid, '| wasDeclined:', wasDeclined);
+      console.log('[Calls:CONN] Closed:', pid, '| wasDeclined:', wasDeclined);
       if (wasDeclined && isOutgoing) setStatus('Call declined');
       cleanupParticipant(pid, wasDeclined && isOutgoing);
     });
 
     conn.on('error', (err: any) => {
-      console.error('[Calls:CONN] ❌ MediaConnection error for:', pid, '—', err?.message ?? err);
+      console.error('[Calls:CONN] Error:', pid, err?.message);
       cleanupParticipant(pid, false);
     });
   }, [setupDataConnection, cleanupParticipant, startTimer]);
@@ -866,7 +877,6 @@ function CallsInner() {
               rtt = r.currentRoundTripTime * 1000;
           });
           const q: NetQuality = rtt < 0 ? 'unknown' : rtt < 150 ? 'good' : rtt < 400 ? 'fair' : 'poor';
-          console.log('[Calls:NET] Quality for', pid, ':', q, '(rtt:', Math.round(rtt), 'ms)');
           setParticipants(prev => prev.map(p => p.id === pid ? { ...p, netQuality: q } : p));
         } catch {}
       }
@@ -877,12 +887,9 @@ function CallsInner() {
   // ── Incoming DATA connection listener ─────────────────────────────────────
   useEffect(() => {
     if (!peer) return;
-    console.log('[Calls:PEER] Attaching data connection listener');
     const onDataConn = (dataConn: DataConnection) => {
-      console.log('[Calls:DATA] Incoming data connection from:', dataConn.peer);
       const existing = participantsRef.current.get(dataConn.peer);
       if (existing && !existing.dataConnection) {
-        console.log('[Calls:DATA] Attaching to existing participant:', dataConn.peer);
         existing.dataConnection = dataConn;
         participantsRef.current.set(existing.id, existing);
         setParticipants(Array.from(participantsRef.current.values()));
@@ -891,9 +898,8 @@ function CallsInner() {
       }
       dataConn.on('data', (data: unknown) => {
         const msg = data as MetadataMessage;
-        console.log('[Calls:DATA] Orphan data from', dataConn.peer, '— type:', msg.type);
+        const pid = dataConn.peer;
         if (msg.type === 'decline') {
-          const pid = dataConn.peer;
           const wasDeclined = !streamReceivedRef.current.has(pid);
           if (wasDeclined) setStatus('Call declined');
           cleanupParticipant(pid, wasDeclined);
@@ -944,7 +950,6 @@ function CallsInner() {
   // ── Incoming MEDIA call listener ──────────────────────────────────────────
   useEffect(() => {
     if (!peer) return;
-    console.log('[Calls:PEER] Attaching incoming call listener');
     const onCall = (call: MediaConnection) => {
       const meta           = (call.metadata ?? {}) as CallMetadata;
       const mode: CallMode = meta.mode === 'video' ? 'video' : 'audio';
@@ -952,12 +957,10 @@ function CallsInner() {
       const userId         = meta.fromUserId ?? 0;
       const callInitiator  = meta.initiatorPeerId ?? call.peer;
 
-      console.log('[Calls:INCOMING] Incoming call from:', call.peer, '| name:', name, '| mode:', mode, '| isGroup:', meta.isGroup);
-      console.log('[Calls:INCOMING] metadata:', JSON.stringify(meta));
-      console.log('[Calls:INCOMING] hasLocalStream:', !!localStreamRef.current, '| inCall:', inCallRef.current);
+      console.log('[Calls:INCOMING] From:', call.peer, '| name:', name, '| mode:', mode);
 
+      // Group call: auto-answer if already in call
       if (localStreamRef.current && meta.isGroup) {
-        console.log('[Calls:INCOMING] Group call auto-answer for:', call.peer);
         if (!initiatorPeerIdRef.current) {
           setInitiatorPeerId(callInitiator);
           initiatorPeerIdRef.current = callInitiator;
@@ -965,7 +968,6 @@ function CallsInner() {
         call.answer(localStreamRef.current);
         setupMediaConnRef.current(call, call.peer, userId, name, false);
         if (meta.existingPeers && peerRef.current) {
-          console.log('[Calls:INCOMING] Connecting to', meta.existingPeers.length, 'existing peers');
           meta.existingPeers.forEach(({ peerId: ep, userId: eu, name: en }) => {
             if (ep !== myPeerId && !activeConnsRef.current.has(ep)) {
               const nc = peerRef.current!.call(ep, localStreamRef.current!, {
@@ -981,18 +983,22 @@ function CallsInner() {
         return;
       }
 
-      console.log('[Calls:INCOMING] Showing incoming call UI for:', name);
+      // Show incoming call UI
       setIncoming({ name, userId, mode, conn: call });
       ringVibration.start();
+      // FIX: also show system notification for when app is backgrounded
+      showIncomingCallNotification(name, mode);
+
       call.on('close', () => {
-        console.log('[Calls:INCOMING] Call closed before answer from:', call.peer);
         setIncoming(prev => prev?.conn === call ? null : prev);
         ringVibration.stop();
+        dismissCallNotification();
       });
       call.on('error', (e: any) => {
-        console.error('[Calls:INCOMING] Incoming call error from:', call.peer, '—', e?.message);
+        console.error('[Calls:INCOMING] Error:', e?.message);
         setIncoming(prev => prev?.conn === call ? null : prev);
         ringVibration.stop();
+        dismissCallNotification();
       });
     };
     peer.on('call', onCall);
@@ -1002,26 +1008,44 @@ function CallsInner() {
 
   // ── Accept / Decline ──────────────────────────────────────────────────────
   const acceptIncoming = useCallback(async () => {
-    console.log('[Calls:ACCEPT] acceptIncoming() called. incoming:', !!incoming);
-    if (!incoming) return;
+    if (!incoming || acceptingRef.current) return;
+    // FIX: set accepting flag BEFORE stopping ring and doing async work
+    acceptingRef.current = true;
     ringVibration.stop();
+    dismissCallNotification();
+
     const { conn, mode, name, userId } = incoming;
     const meta          = (conn.metadata ?? {}) as CallMetadata;
     const callInitiator = meta.initiatorPeerId ?? conn.peer;
+
+    // Clear incoming BEFORE async getUserMedia to prevent AppState race
+    setIncoming(null);
+
     try {
       console.log('[Calls:ACCEPT] Getting media for mode:', mode);
-      const stream = localStreamRef.current ?? await getMedia(mode);
+      const stream = await getMedia(mode);
+
+      // FIX: After async getUserMedia, verify peer is still valid and we haven't been reset
+      if (!peerRef.current) {
+        console.error('[Calls:ACCEPT] Peer is null after getUserMedia — aborting');
+        stream.getTracks().forEach((t: any) => t.stop());
+        acceptingRef.current = false;
+        return;
+      }
+
       console.log('[Calls:ACCEPT] Answering call from:', conn.peer);
       conn.answer(stream);
+
       if (!inCallRef.current) {
-        setInCall(true); setCallMode(mode);
-        setInitiatorPeerId(callInitiator); initiatorPeerIdRef.current = callInitiator;
+        setInCall(true);
+        setCallMode(mode);
+        setInitiatorPeerId(callInitiator);
+        initiatorPeerIdRef.current = callInitiator;
         setView('call');
-        try { InCallManager?.start({ media: mode }); InCallManager?.setKeepScreenOn(true); } catch (e: any) {
-          console.warn('[Calls:ACCEPT] InCallManager start failed:', e?.message);
-        }
+        try { InCallManager?.start({ media: mode }); InCallManager?.setKeepScreenOn(true); } catch {}
       }
       setupMediaConnRef.current(conn, conn.peer, userId, name, false);
+
       if (meta.existingPeers && peerRef.current) {
         meta.existingPeers.forEach(({ peerId: ep, userId: eu, name: en }) => {
           if (ep !== myPeerId && !activeConnsRef.current.has(ep)) {
@@ -1035,18 +1059,19 @@ function CallsInner() {
           }
         });
       }
+      acceptingRef.current = false;
     } catch (e: any) {
-      console.error('[Calls:ACCEPT] ❌ Failed:', e?.message, '| name:', e?.name);
-      setStatus('Permission denied');
+      console.error('[Calls:ACCEPT] Failed:', e?.message);
+      setStatus('Permission denied — allow mic/camera and retry');
+      acceptingRef.current = false;
       resetCallState();
     }
-    setIncoming(null);
   }, [incoming, getMedia, myPeerId, myName, myId, resetCallState]);
 
   const declineIncoming = useCallback(() => {
-    console.log('[Calls:DECLINE] declineIncoming() called');
-    ringVibration.stop();
     if (!incoming) return;
+    ringVibration.stop();
+    dismissCallNotification();
     const activePeer = peerRef.current;
     if (activePeer) {
       try {
@@ -1065,38 +1090,30 @@ function CallsInner() {
   // ── Controls ──────────────────────────────────────────────────────────────
   const toggleMic = useCallback(() => {
     const next = !micMuted;
-    console.log('[Calls:CTRL] toggleMic → muted:', next);
     setMicMuted(next);
     localStreamRef.current?.getAudioTracks().forEach((t: any) => { t.enabled = !next; });
   }, [micMuted]);
 
   const toggleCamera = useCallback(() => {
     const next = !cameraOff;
-    console.log('[Calls:CTRL] toggleCamera → off:', next);
     setCameraOff(next);
     localStreamRef.current?.getVideoTracks().forEach((t: any) => { t.enabled = !next; });
     broadcastToAll({ type: 'videoOff', value: next });
   }, [cameraOff, broadcastToAll]);
 
   const flipCamera = useCallback(() => {
-    console.log('[Calls:CTRL] flipCamera()');
     const vt = localStreamRef.current?.getVideoTracks()[0];
     if (vt) { (vt as any)._switchCamera?.(); setFrontCamera(f => !f); }
-    else console.warn('[Calls:CTRL] No video track to flip');
   }, []);
 
   const toggleSpeaker = useCallback(() => {
     const next = !speakerOn;
-    console.log('[Calls:CTRL] toggleSpeaker → on:', next);
     setSpeakerOn(next);
-    try { InCallManager?.setSpeakerphoneOn(next); } catch (e: any) {
-      console.warn('[Calls:CTRL] setSpeakerphoneOn failed:', e?.message);
-    }
+    try { InCallManager?.setSpeakerphoneOn(next); } catch {}
   }, [speakerOn]);
 
   const toggleNoiseSup = useCallback(async () => {
     const next = !noiseSup;
-    console.log('[Calls:CTRL] toggleNoiseSup → on:', next);
     setNoiseSup(next);
     if (!inCall || !localStreamRef.current) return;
     try {
@@ -1115,14 +1132,13 @@ function CallsInner() {
           if (sender) sender.replaceTrack(nt);
         } catch {}
       });
-      console.log('[Calls:CTRL] ✅ Noise suppression toggled');
     } catch (e: any) {
       console.error('[Calls:CTRL] toggleNoiseSup failed:', e?.message);
     }
   }, [noiseSup, inCall]);
 
   const endCall = useCallback(() => {
-    console.log('[Calls:END] endCall() called. participants:', participantsRef.current.size);
+    console.log('[Calls:END] endCall()');
     broadcastToAll({ type: 'peerLeft', peerId: myPeerId });
     activeConnsRef.current.forEach((conn, pid) => {
       if (!streamReceivedRef.current.has(pid) && peerRef.current) {
@@ -1139,11 +1155,9 @@ function CallsInner() {
     resetCallState();
     setStatus('Call ended');
     setView('home');
-    console.log('[Calls:END] ✅ Call ended');
   }, [broadcastToAll, myPeerId, resetCallState]);
 
   const removeParticipant = useCallback((pid: string) => {
-    console.log('[Calls:KICK] removeParticipant:', pid);
     broadcastToAll({ type: 'kick', peerId: pid });
     const p = participantsRef.current.get(pid);
     if (p?.dataConnection?.open) {
@@ -1161,10 +1175,9 @@ function CallsInner() {
   }, [broadcastToAll]);
 
   const callEmployee = useCallback(async (emp: Employee) => {
-    console.log('[Calls:CALL] callEmployee:', emp.id, emp.full_name, '| peerReady:', peerReady, '| mode:', callMode);
+    console.log('[Calls:CALL] callEmployee:', emp.id, emp.full_name);
     if (!peerRef.current || !peerReady) {
-      console.warn('[Calls:CALL] ⚠️ Peer not ready');
-      Alert.alert('Not connected', 'Peer service not ready. Please try again.');
+      Alert.alert('Not connected', 'Peer service not ready. Please wait a moment and retry.');
       return;
     }
     const targetPeerId = `u-${emp.id}`;
@@ -1172,23 +1185,29 @@ function CallsInner() {
     try {
       setStatus(`Calling ${emp.full_name}…`);
       ringVibration.start();
-      console.log('[Calls:CALL] Getting media…');
       const stream = await getMedia(callMode);
-      console.log('[Calls:CALL] Calling peer:', targetPeerId);
-      setInitiatorPeerId(myPeerId); initiatorPeerIdRef.current = myPeerId;
+
+      // FIX: check peer still valid after async
+      if (!peerRef.current) {
+        stream.getTracks().forEach((t: any) => t.stop());
+        ringVibration.stop();
+        setStatus('Connection lost');
+        return;
+      }
+
+      setInitiatorPeerId(myPeerId);
+      initiatorPeerIdRef.current = myPeerId;
       const conn = peerRef.current.call(targetPeerId, stream, {
         metadata: {
           mode: callMode, fromName: myName, fromUserId: Number(myId), initiatorPeerId: myPeerId,
         } as CallMetadata,
       });
-      console.log('[Calls:CALL] Call connection created:', !!conn);
-      setInCall(true); setView('call');
-      try { InCallManager?.start({ media: callMode }); InCallManager?.setKeepScreenOn(true); } catch (e: any) {
-        console.warn('[Calls:CALL] InCallManager start failed:', e?.message);
-      }
+      setInCall(true);
+      setView('call');
+      try { InCallManager?.start({ media: callMode }); InCallManager?.setKeepScreenOn(true); } catch {}
       setupMediaConnection(conn, targetPeerId, emp.id, emp.full_name, true);
     } catch (e: any) {
-      console.error('[Calls:CALL] ❌ callEmployee failed:', e?.message, '| name:', e?.name);
+      console.error('[Calls:CALL] Failed:', e?.message);
       ringVibration.stop();
       setStatus('Permission denied — allow mic/camera and retry');
       resetCallState();
@@ -1196,26 +1215,25 @@ function CallsInner() {
   }, [peerReady, callMode, myPeerId, myName, myId, getMedia, setupMediaConnection, resetCallState]);
 
   const startGroupCall = useCallback(async () => {
-    console.log('[Calls:GROUP] startGroupCall. selected:', selectedIds.size, '| peerReady:', peerReady);
     if (!peerRef.current || !peerReady || selectedIds.size === 0) return;
     try {
       setStatus('Starting group call…');
       ringVibration.start();
       const stream  = await getMedia(callMode);
       const targets = callPeople.filter(e => selectedIds.has(e.id));
-      console.log('[Calls:GROUP] Calling', targets.length, 'people');
-      setInitiatorPeerId(myPeerId); initiatorPeerIdRef.current = myPeerId;
-      setInCall(true); setView('call'); setGroupMode(false); setSelectedIds(new Set());
-      try { InCallManager?.start({ media: callMode }); InCallManager?.setKeepScreenOn(true); } catch (e: any) {
-        console.warn('[Calls:GROUP] InCallManager start failed:', e?.message);
-      }
+      setInitiatorPeerId(myPeerId);
+      initiatorPeerIdRef.current = myPeerId;
+      setInCall(true);
+      setView('call');
+      setGroupMode(false);
+      setSelectedIds(new Set());
+      try { InCallManager?.start({ media: callMode }); InCallManager?.setKeepScreenOn(true); } catch {}
       for (const emp of targets) {
         const tpid = `u-${emp.id}`;
         const existingPeers: GroupPeerInfo[] = [
           { peerId: myPeerId, userId: Number(myId), name: myName },
           ...targets.filter(t => t.id !== emp.id).map(t => ({ peerId: `u-${t.id}`, userId: t.id, name: t.full_name })),
         ];
-        console.log('[Calls:GROUP] Calling:', tpid, '| existingPeers:', existingPeers.length);
         const conn = peerRef.current!.call(tpid, stream, {
           metadata: {
             mode: callMode, fromName: myName, fromUserId: Number(myId),
@@ -1225,19 +1243,17 @@ function CallsInner() {
         setupMediaConnection(conn, tpid, emp.id, emp.full_name, true);
       }
     } catch (e: any) {
-      console.error('[Calls:GROUP] ❌ startGroupCall failed:', e?.message);
-      ringVibration.stop(); setStatus('Permission denied'); resetCallState();
+      console.error('[Calls:GROUP] Failed:', e?.message);
+      ringVibration.stop();
+      setStatus('Permission denied');
+      resetCallState();
     }
   }, [peerReady, selectedIds, callMode, callPeople, myPeerId, myId, myName, getMedia, setupMediaConnection, resetCallState]);
 
   const addToCall = useCallback(async (emp: Employee) => {
-    console.log('[Calls:ADD] addToCall:', emp.id, emp.full_name);
     if (!peerRef.current || !localStreamRef.current) return;
     const tpid = `u-${emp.id}`;
-    if (activeConnsRef.current.has(tpid)) {
-      console.warn('[Calls:ADD] Already connected to:', tpid);
-      return;
-    }
+    if (activeConnsRef.current.has(tpid)) return;
     const existingPeers: GroupPeerInfo[] = [
       { peerId: myPeerId, userId: Number(myId), name: myName },
       ...Array.from(participantsRef.current.values()).map(p => ({ peerId: p.id, userId: p.userId, name: p.name })),
@@ -1256,7 +1272,6 @@ function CallsInner() {
   useEffect(() => {
     if (Platform.OS !== 'android') return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      console.log('[Calls:NAV] Android back pressed. view:', view);
       if (view === 'call') {
         Alert.alert('Leave call?', 'Do you want to end the call?', [
           { text: 'Stay', style: 'cancel' },
@@ -1270,13 +1285,28 @@ function CallsInner() {
     return () => sub.remove();
   }, [view, endCall]);
 
+  // FIX: removed AppState background auto-decline — it was killing calls when
+  // the screen locked during getUserMedia (async). Notifications handle background.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
-      console.log('[Calls:APP] AppState changed to:', state, '| incoming:', !!incoming);
-      if (state === 'background' && incoming) declineIncoming();
+      console.log('[Calls:APP] AppState:', state);
+      // No auto-decline on background
     });
     return () => sub.remove();
-  }, [incoming, declineIncoming]);
+  }, []);
+
+  // ── Notification tap handler (open app to call screen) ───────────────────
+  useEffect(() => {
+    if (!Notifications) return;
+    const sub = Notifications.addNotificationResponseReceivedListener((response: any) => {
+      const data = response.notification.request.content.data;
+      if (data?.type === 'incoming_call') {
+        console.log('[Calls:PUSH] Notification tapped — incoming call from:', data.callerName);
+        // The live incoming call modal will show if the peer connection is still open
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   // ── Filtered lists ────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -1305,10 +1335,12 @@ function CallsInner() {
     [participants],
   );
 
+  // ── Grid layout (FIX: proper spotlight handling) ──────────────────────────
   const totalTiles = participants.length + 1;
   const gridCols   = totalTiles <= 1 ? 1 : totalTiles <= 4 ? 2 : 3;
   const tileW      = SW / gridCols;
-  const gridHeight = Math.ceil(totalTiles / gridCols) * (tileW * (9 / 16));
+  const tileH      = tileW * (9 / 16);
+  const gridHeight  = Math.ceil(totalTiles / gridCols) * tileH;
 
   const spotlitParticipant = spotlightId && spotlightId !== 'me'
     ? participants.find(p => p.id === spotlightId) ?? null
@@ -1320,25 +1352,43 @@ function CallsInner() {
     <SafeAreaView style={s.homeRoot}>
       <StatusBar barStyle="light-content" />
       <Text style={s.homeTitle}>Calls</Text>
-      <Text style={s.homeSubtitle}>Choose how you want to connect</Text>
+      <Text style={s.homeSubtitle}>Connect with your team</Text>
       <View style={s.homeCards}>
-        <TouchableOpacity style={[s.homeCard, { backgroundColor: '#1d4ed8' }]} activeOpacity={0.85}
-          onPress={() => { console.log('[Calls:NAV] → Voice Call screen'); setCallMode('audio'); setSearch(''); setView('employees'); }}>
-          <Text style={s.homeCardIcon}>🎙️</Text>
+        <TouchableOpacity
+          style={[s.homeCard, { backgroundColor: '#1a3a6b' }]}
+          activeOpacity={0.85}
+          onPress={() => { setCallMode('audio'); setSearch(''); setView('employees'); }}
+        >
+          <View style={s.homeCardIconWrap}>
+            <Ionicons name="call" size={32} color="#60a5fa" />
+          </View>
           <Text style={s.homeCardTitle}>Voice Call</Text>
           <Text style={s.homeCardSub}>High-quality audio with noise suppression</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[s.homeCard, { backgroundColor: '#7e22ce' }]} activeOpacity={0.85}
-          onPress={() => { console.log('[Calls:NAV] → Video Call screen'); setCallMode('video'); setSearch(''); setView('employees'); }}>
-          <Text style={s.homeCardIcon}>📹</Text>
+        <TouchableOpacity
+          style={[s.homeCard, { backgroundColor: '#2d1b5e' }]}
+          activeOpacity={0.85}
+          onPress={() => { setCallMode('video'); setSearch(''); setView('employees'); }}
+        >
+          <View style={s.homeCardIconWrap}>
+            <Ionicons name="videocam" size={32} color="#a78bfa" />
+          </View>
           <Text style={s.homeCardTitle}>Video Call</Text>
           <Text style={s.homeCardSub}>Face-to-face HD video with group support</Text>
         </TouchableOpacity>
       </View>
       <View style={s.homePeerBadge}>
         <View style={[s.homePeerDot, { backgroundColor: peerReady ? '#3ba55d' : '#e67700' }]} />
-        <Text style={s.homePeerTxt}>{peerReady ? `Online · ${myPeerId}` : 'Connecting to peer service…'}</Text>
+        <Text style={s.homePeerTxt}>
+          {peerReady ? `Online · ${myPeerId}` : 'Connecting to peer service…'}
+        </Text>
       </View>
+      {status !== 'Ready' && (
+        <View style={s.statusBanner}>
+          <Ionicons name="information-circle-outline" size={14} color="#818cf8" />
+          <Text style={s.statusBannerTxt}>{status}</Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 
@@ -1347,32 +1397,47 @@ function CallsInner() {
     <SafeAreaView style={s.empRoot}>
       <StatusBar barStyle="light-content" />
       <View style={s.empHeader}>
-        <TouchableOpacity onPress={() => { setView('home'); setGroupMode(false); setSelectedIds(new Set()); }} style={s.empBack}>
-          <Text style={s.empBackTxt}>‹  Back</Text>
+        <TouchableOpacity
+          onPress={() => { setView('home'); setGroupMode(false); setSelectedIds(new Set()); }}
+          style={s.empBack}
+        >
+          <Ionicons name="chevron-back" size={22} color="#818cf8" />
+          <Text style={s.empBackTxt}>Back</Text>
         </TouchableOpacity>
         <Text style={s.empHeaderTitle}>
-          {callMode === 'audio' ? '🎙️' : '📹'}  {callMode === 'audio' ? 'Voice' : 'Video'} Call
+          {callMode === 'audio' ? 'Voice Call' : 'Video Call'}
         </Text>
-        <TouchableOpacity style={[s.groupToggle, groupMode && s.groupToggleActive]}
-          onPress={() => { setGroupMode(g => !g); setSelectedIds(new Set()); }}>
-          <Text style={[s.groupToggleTxt, groupMode && { color: '#818cf8' }]}>👥  Group</Text>
+        <TouchableOpacity
+          style={[s.groupToggle, groupMode && s.groupToggleActive]}
+          onPress={() => { setGroupMode(g => !g); setSelectedIds(new Set()); }}
+        >
+          <Ionicons name="people" size={14} color={groupMode ? '#818cf8' : 'rgba(255,255,255,0.5)'} />
+          <Text style={[s.groupToggleTxt, groupMode && { color: '#818cf8' }]}>Group</Text>
         </TouchableOpacity>
       </View>
 
       {groupMode && (
         <View style={s.groupBar}>
           <Text style={s.groupBarTxt}>{selectedIds.size} selected</Text>
-          <TouchableOpacity style={[s.groupStartBtn, (selectedIds.size === 0 || !peerReady) && { opacity: 0.4 }]}
-            onPress={startGroupCall} disabled={selectedIds.size === 0 || !peerReady}>
+          <TouchableOpacity
+            style={[s.groupStartBtn, (selectedIds.size === 0 || !peerReady) && { opacity: 0.4 }]}
+            onPress={startGroupCall}
+            disabled={selectedIds.size === 0 || !peerReady}
+          >
             <Text style={s.groupStartBtnTxt}>Start Group Call</Text>
           </TouchableOpacity>
         </View>
       )}
 
       <View style={s.searchWrap}>
-        <Text style={s.searchIcon}>🔍</Text>
-        <TextInput style={s.searchInput} placeholder="Search people…"
-          placeholderTextColor="rgba(255,255,255,0.35)" value={search} onChangeText={setSearch} />
+        <Ionicons name="search" size={16} color="rgba(255,255,255,0.4)" />
+        <TextInput
+          style={s.searchInput}
+          placeholder="Search people…"
+          placeholderTextColor="rgba(255,255,255,0.35)"
+          value={search}
+          onChangeText={setSearch}
+        />
       </View>
 
       {empLoading ? (
@@ -1386,7 +1451,9 @@ function CallsInner() {
           renderItem={({ item: emp }) => {
             const isSelected = selectedIds.has(emp.id);
             return (
-              <TouchableOpacity style={s.empItem} activeOpacity={0.75}
+              <TouchableOpacity
+                style={s.empItem}
+                activeOpacity={0.75}
                 onPress={() => {
                   if (groupMode) {
                     setSelectedIds(prev => {
@@ -1395,10 +1462,11 @@ function CallsInner() {
                       return n;
                     });
                   }
-                }}>
+                }}
+              >
                 {groupMode && (
                   <View style={[s.checkbox, isSelected && s.checkboxChecked]}>
-                    {isSelected && <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>✓</Text>}
+                    {isSelected && <Ionicons name="checkmark" size={13} color="#fff" />}
                   </View>
                 )}
                 <Avatar name={emp.full_name} size={42} />
@@ -1409,9 +1477,12 @@ function CallsInner() {
                   </Text>
                 </View>
                 {!groupMode && (
-                  <TouchableOpacity style={[s.callBtnSm, !peerReady && { opacity: 0.4 }]}
-                    disabled={!peerReady} onPress={() => callEmployee(emp)}>
-                    <Text style={{ fontSize: 16 }}>📞</Text>
+                  <TouchableOpacity
+                    style={[s.callBtnSm, !peerReady && { opacity: 0.4 }]}
+                    disabled={!peerReady}
+                    onPress={() => callEmployee(emp)}
+                  >
+                    <Ionicons name="call" size={18} color="#fff" />
                   </TouchableOpacity>
                 )}
               </TouchableOpacity>
@@ -1427,54 +1498,74 @@ function CallsInner() {
     <View style={s.callRoot}>
       <StatusBar barStyle="light-content" hidden />
 
+      {/* Header */}
       <SafeAreaView style={s.callHeader}>
         <View style={s.callHeaderInner}>
           <View style={s.callDot} />
           <View style={{ flex: 1 }}>
             <Text style={s.callHeaderTitle} numberOfLines={1}>
               {participants.length >= 1
-                ? `Group  ·  ${participants.length + 1} people`
+                ? `Group · ${participants.length + 1} people`
                 : (participants[0]?.name ?? 'Connecting…')}
-              {amInitiator ? '  👑' : ''}
+              {amInitiator ? '  ★' : ''}
             </Text>
             <Text style={s.callHeaderSub}>
               {callDuration > 0 ? fmt(callDuration) : 'Connecting…'}  ·  {status}
             </Text>
           </View>
           <TouchableOpacity onPress={() => setAddPanelOpen(v => !v)} style={s.addBtn}>
-            <Text style={{ fontSize: 18 }}>{addPanelOpen ? '✕' : '➕'}</Text>
+            <Ionicons name={addPanelOpen ? 'close' : 'person-add'} size={18} color="#fff" />
           </TouchableOpacity>
         </View>
       </SafeAreaView>
 
+      {/* Video / Audio area */}
       <View style={{ flex: 1 }}>
         {callMode === 'video' ? (
           spotlightId ? (
+            // FIX: Spotlight view — large main + thumbnail strip
             <View style={{ flex: 1 }}>
               <View style={{ flex: 1 }}>
                 {spotlitIsLocal ? (
-                  <VideoTile stream={localStream} name={myName} isLocal videoOff={cameraOff}
+                  <VideoTile
+                    stream={localStream} name={myName} isLocal videoOff={cameraOff}
                     muted={micMuted} netQuality="good" isSpotlit isSharing={false}
                     onPress={() => setSpotlightId(null)} amInitiator={amInitiator}
-                    frontCamera={frontCamera} tileWidth={SW} tileHeight={SH * 0.62} />
+                    frontCamera={frontCamera} tileWidth={SW} tileHeight={SH * 0.6}
+                  />
                 ) : spotlitParticipant ? (
-                  <VideoTile stream={spotlitParticipant.stream} name={spotlitParticipant.name}
+                  <VideoTile
+                    stream={spotlitParticipant.stream} name={spotlitParticipant.name}
                     isLocal={false} videoOff={spotlitParticipant.videoOff}
                     muted={spotlitParticipant.muted} netQuality={spotlitParticipant.netQuality}
                     isSpotlit isSharing={spotlitParticipant.isScreenSharing}
                     onPress={() => setSpotlightId(null)}
                     onRemove={() => removeParticipant(spotlitParticipant.id)}
                     amInitiator={amInitiator} frontCamera={frontCamera}
-                    tileWidth={SW} tileHeight={SH * 0.62} />
+                    tileWidth={SW} tileHeight={SH * 0.6}
+                  />
                 ) : null}
               </View>
-              <ScrollView horizontal style={s.strip} contentContainerStyle={{ gap: 4, padding: 6 }}>
+              {/* Thumbnail strip */}
+              <ScrollView
+                horizontal
+                style={s.strip}
+                contentContainerStyle={{ gap: 6, padding: 8 }}
+                showsHorizontalScrollIndicator={false}
+              >
                 {spotlightId !== 'me' && (
                   <TouchableOpacity style={s.stripTile} onPress={() => setSpotlightId('me')}>
                     {localStream && !cameraOff && RTCView ? (
-                      <RTCView streamURL={localStream.toURL()} style={StyleSheet.absoluteFillObject}
-                        objectFit="cover" mirror={frontCamera} zOrder={0} />
-                    ) : <Avatar name={myName} size={30} />}
+                      <RTCView
+                        streamURL={localStream.toURL()}
+                        style={StyleSheet.absoluteFillObject}
+                        objectFit="cover"
+                        mirror={frontCamera}
+                        zOrder={0}
+                      />
+                    ) : (
+                      <Avatar name={myName} size={30} />
+                    )}
                     <View style={s.tileOverlay}>
                       <Text style={[s.tileName, { fontSize: 9 }]}>You</Text>
                     </View>
@@ -1483,83 +1574,157 @@ function CallsInner() {
                 {participants.filter(p => p.id !== spotlightId).map(p => (
                   <TouchableOpacity key={p.id} style={s.stripTile} onPress={() => setSpotlightId(p.id)}>
                     {p.stream && !p.videoOff && RTCView ? (
-                      <RTCView streamURL={p.stream.toURL()} style={StyleSheet.absoluteFillObject}
-                        objectFit="cover" zOrder={1} />
-                    ) : <Avatar name={p.name} size={30} />}
+                      <RTCView
+                        streamURL={p.stream.toURL()}
+                        style={StyleSheet.absoluteFillObject}
+                        objectFit="cover"
+                        zOrder={1}
+                      />
+                    ) : (
+                      <Avatar name={p.name} size={30} />
+                    )}
                     <View style={s.tileOverlay}>
                       <Text style={[s.tileName, { fontSize: 9 }]} numberOfLines={1}>{p.name}</Text>
                     </View>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
+              {/* Hint */}
+              <View style={s.spotlightHint}>
+                <Ionicons name="information-circle-outline" size={12} color="rgba(255,255,255,0.4)" />
+                <Text style={s.spotlightHintTxt}>Tap main video to exit spotlight</Text>
+              </View>
             </View>
           ) : (
-            <ScrollView contentContainerStyle={{ height: Math.max(gridHeight, SH * 0.55) }}>
+            // Grid view — tap any tile to spotlight
+            <ScrollView contentContainerStyle={{ minHeight: Math.max(gridHeight, SH * 0.52) }}>
+              {/* Hint shown when multiple participants */}
+              {totalTiles > 1 && (
+                <View style={s.spotlightHint}>
+                  <Ionicons name="expand-outline" size={12} color="rgba(255,255,255,0.4)" />
+                  <Text style={s.spotlightHintTxt}>Tap any tile to go fullscreen</Text>
+                </View>
+              )}
               <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-                <VideoTile stream={localStream} name={myName} isLocal videoOff={cameraOff}
-                  muted={micMuted} netQuality="good" isSpotlit={spotlightId === 'me'}
-                  onPress={() => setSpotlightId(id => id === 'me' ? null : 'me')}
+                <VideoTile
+                  stream={localStream} name={myName} isLocal videoOff={cameraOff}
+                  muted={micMuted} netQuality="good" isSpotlit={false}
+                  onPress={() => setSpotlightId('me')}
                   amInitiator={amInitiator} frontCamera={frontCamera}
-                  tileWidth={tileW} tileHeight={tileW * (9 / 16)} />
+                  tileWidth={tileW} tileHeight={tileH}
+                />
                 {participants.map(p => (
-                  <VideoTile key={p.id} stream={p.stream} name={p.name} isLocal={false}
+                  <VideoTile
+                    key={p.id} stream={p.stream} name={p.name} isLocal={false}
                     videoOff={p.videoOff} muted={p.muted} netQuality={p.netQuality}
-                    isSpotlit={spotlightId === p.id} isSharing={p.isScreenSharing}
-                    onPress={() => setSpotlightId(id => id === p.id ? null : p.id)}
+                    isSpotlit={false} isSharing={p.isScreenSharing}
+                    onPress={() => setSpotlightId(p.id)}
                     onRemove={() => removeParticipant(p.id)}
                     amInitiator={amInitiator} frontCamera={frontCamera}
-                    tileWidth={tileW} tileHeight={tileW * (9 / 16)} />
+                    tileWidth={tileW} tileHeight={tileH}
+                  />
                 ))}
               </View>
             </ScrollView>
           )
         ) : (
+          // Audio view
           <View style={s.audioStage}>
             <ScrollView contentContainerStyle={s.audioGrid}>
-              <AudioCircle name={`You${amInitiator ? ' 👑' : ''}`} muted={micMuted} active={!micMuted} amInitiator={false} />
+              <AudioCircle
+                name={`You${amInitiator ? ' ★' : ''}`}
+                muted={micMuted}
+                active={!micMuted}
+                amInitiator={false}
+              />
               {participants.map(p => (
-                <AudioCircle key={p.id} name={p.name} muted={p.muted} active={!p.muted}
-                  amInitiator={amInitiator} onRemove={() => removeParticipant(p.id)} />
+                <AudioCircle
+                  key={p.id} name={p.name} muted={p.muted} active={!p.muted}
+                  amInitiator={amInitiator} onRemove={() => removeParticipant(p.id)}
+                />
               ))}
             </ScrollView>
             <Text style={s.audioDuration}>{callDuration > 0 ? fmt(callDuration) : 'Connecting…'}</Text>
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, justifyContent: 'center', paddingHorizontal: 20 }}>
-              {participants.map(p => (
-                <View key={p.id} style={{ alignItems: 'center', gap: 2 }}>
-                  <NetBadge quality={p.netQuality} />
-                  <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)' }} numberOfLines={1}>{p.name.split(' ')[0]}</Text>
-                </View>
-              ))}
-            </View>
+            {participants.length > 0 && (
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 8, justifyContent: 'center' }}>
+                {participants.map(p => (
+                  <View key={p.id} style={{ alignItems: 'center', gap: 2 }}>
+                    <NetBadge quality={p.netQuality} />
+                    <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)' }} numberOfLines={1}>
+                      {p.name.split(' ')[0]}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         )}
       </View>
 
+      {/* Controls */}
       <SafeAreaView style={s.controlsBar}>
         <View style={s.controls}>
-          <CtrlBtn label={micMuted ? 'Unmute' : 'Mute'} icon={micMuted ? '🔇' : '🎙️'} onPress={toggleMic} active={micMuted} />
+          <CtrlBtn
+            label={micMuted ? 'Unmute' : 'Mute'}
+            iconName={micMuted ? 'mic-off' : 'mic'}
+            onPress={toggleMic}
+            active={micMuted}
+          />
           {callMode === 'video' && (
-            <CtrlBtn label={cameraOff ? 'Cam On' : 'Cam Off'} icon={cameraOff ? '📷' : '📹'} onPress={toggleCamera} active={cameraOff} />
+            <CtrlBtn
+              label={cameraOff ? 'Cam On' : 'Cam Off'}
+              iconName={cameraOff ? 'videocam-off' : 'videocam'}
+              onPress={toggleCamera}
+              active={cameraOff}
+            />
           )}
-          {callMode === 'video' && <CtrlBtn label="Flip" icon="🔄" onPress={flipCamera} />}
-          <CtrlBtn label={speakerOn ? 'Earpiece' : 'Speaker'} icon={speakerOn ? '🔊' : '🔈'} onPress={toggleSpeaker} active={speakerOn} />
-          <CtrlBtn label={noiseSup ? 'Noise Off' : 'Noise On'} icon="🎚️" onPress={toggleNoiseSup} active={noiseSup} />
-          <CtrlBtn label="End" icon="📵" danger large onPress={() => {
-            Alert.alert('End call', 'Are you sure?', [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'End', style: 'destructive', onPress: endCall },
-            ]);
-          }} />
+          {callMode === 'video' && (
+            <CtrlBtn
+              label="Flip"
+              iconName="camera-reverse"
+              onPress={flipCamera}
+            />
+          )}
+          <CtrlBtn
+            label={speakerOn ? 'Earpiece' : 'Speaker'}
+            iconName={speakerOn ? 'volume-high' : 'volume-medium'}
+            onPress={toggleSpeaker}
+            active={speakerOn}
+          />
+          <CtrlBtn
+            label={noiseSup ? 'Noise On' : 'Noise Off'}
+            iconName="options"
+            onPress={toggleNoiseSup}
+            active={noiseSup}
+          />
+          <CtrlBtn
+            label="End"
+            iconName="call"
+            danger
+            large
+            onPress={() => {
+              Alert.alert('End call', 'Are you sure you want to end the call?', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'End Call', style: 'destructive', onPress: endCall },
+              ]);
+            }}
+          />
         </View>
       </SafeAreaView>
 
+      {/* Add people panel */}
       {addPanelOpen && (
         <View style={s.addPanel}>
           <Text style={s.addPanelTitle}>Add to call  ({participants.length + 1} in call)</Text>
           <View style={s.searchWrap}>
-            <Text style={s.searchIcon}>🔍</Text>
-            <TextInput style={[s.searchInput, { fontSize: 12 }]} placeholder="Search people to add…"
-              placeholderTextColor="rgba(255,255,255,0.35)" value={addSearch} onChangeText={setAddSearch} />
+            <Ionicons name="search" size={14} color="rgba(255,255,255,0.4)" />
+            <TextInput
+              style={[s.searchInput, { fontSize: 12 }]}
+              placeholder="Search people to add…"
+              placeholderTextColor="rgba(255,255,255,0.35)"
+              value={addSearch}
+              onChangeText={setAddSearch}
+            />
           </View>
           <FlatList
             data={filteredForAdd.slice(0, 10)}
@@ -1574,13 +1739,17 @@ function CallsInner() {
                   <Avatar name={emp.full_name} size={32} />
                   <View style={s.empInfo}>
                     <Text style={[s.empName, { fontSize: 12 }]}>{emp.full_name}</Text>
-                    {emp.position && <Text style={[s.empSub, { fontSize: 10 }]} numberOfLines={1}>{emp.position}</Text>}
+                    {emp.position && (
+                      <Text style={[s.empSub, { fontSize: 10 }]} numberOfLines={1}>{emp.position}</Text>
+                    )}
                   </View>
                   {isOnCall ? (
-                    <View style={s.onCallBadge}><Text style={s.onCallBadgeTxt}>On call</Text></View>
+                    <View style={s.onCallBadge}>
+                      <Text style={s.onCallBadgeTxt}>On call</Text>
+                    </View>
                   ) : (
                     <TouchableOpacity style={s.addBtnSm} onPress={() => addToCall(emp)}>
-                      <Text style={{ fontSize: 14 }}>➕</Text>
+                      <Ionicons name="person-add" size={14} color="#fff" />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -1597,8 +1766,12 @@ function CallsInner() {
       {view === 'home'      && renderHome()}
       {view === 'employees' && renderEmployees()}
       {view === 'call'      && renderCall()}
-      {incoming && (
-        <IncomingCallModal incoming={incoming} onAccept={acceptIncoming} onDecline={declineIncoming} />
+      {incoming && !acceptingRef.current && (
+        <IncomingCallModal
+          incoming={incoming}
+          onAccept={acceptIncoming}
+          onDecline={declineIncoming}
+        />
       )}
     </View>
   );
@@ -1610,60 +1783,80 @@ function CallsInner() {
 const s = StyleSheet.create({
   avatar:            { alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   avatarTxt:         { color: '#fff', fontWeight: '700', letterSpacing: 0.5 },
+
+  // Home
   homeRoot:          { flex: 1, backgroundColor: '#080810', paddingHorizontal: 20, paddingTop: 20 },
-  homeTitle:         { fontSize: 32, fontWeight: '800', color: '#fff', marginTop: 20, letterSpacing: -0.5 },
-  homeSubtitle:      { fontSize: 14, color: 'rgba(255,255,255,0.5)', marginBottom: 36, marginTop: 6 },
-  homeCards:         { gap: 16 },
-  homeCard:          { borderRadius: 20, padding: 24, gap: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 8 },
-  homeCardIcon:      { fontSize: 36, marginBottom: 4 },
-  homeCardTitle:     { fontSize: 22, fontWeight: '700', color: '#fff' },
-  homeCardSub:       { fontSize: 13, color: 'rgba(255,255,255,0.65)' },
-  homePeerBadge:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 28, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
+  homeTitle:         { fontSize: 30, fontWeight: '800', color: '#fff', marginTop: 16, letterSpacing: -0.5 },
+  homeSubtitle:      { fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 28, marginTop: 4 },
+  homeCards:         { gap: 14 },
+  homeCard:          {
+    borderRadius: 18, padding: 22, gap: 6,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 14, elevation: 8,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)',
+  },
+  homeCardIconWrap:  { width: 52, height: 52, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  homeCardTitle:     { fontSize: 20, fontWeight: '700', color: '#fff' },
+  homeCardSub:       { fontSize: 12, color: 'rgba(255,255,255,0.55)', lineHeight: 18 },
+  homePeerBadge:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 24, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' },
   homePeerDot:       { width: 8, height: 8, borderRadius: 4 },
-  homePeerTxt:       { fontSize: 11, color: 'rgba(255,255,255,0.45)', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
-  empRoot:           { flex: 1, backgroundColor: '#080810' },
-  empHeader:         { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)', gap: 10 },
-  empBack:           { paddingVertical: 4, paddingRight: 8 },
-  empBackTxt:        { fontSize: 16, color: '#818cf8', fontWeight: '600' },
-  empHeaderTitle:    { flex: 1, fontSize: 16, fontWeight: '700', color: '#fff', textAlign: 'center' },
-  groupToggle:       { borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
+  homePeerTxt:       { fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+  statusBanner:      { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, backgroundColor: 'rgba(88,101,242,0.1)', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(88,101,242,0.2)' },
+  statusBannerTxt:   { fontSize: 12, color: 'rgba(255,255,255,0.55)', flex: 1 },
+
+  // Employees
+  empRoot:           { flex: 1, backgroundColor: '#080810',paddingTop:25 },
+  empHeader:         { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)', gap: 8 },
+  empBack:           { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 4 },
+  empBackTxt:        { fontSize: 15, color: '#818cf8', fontWeight: '600' },
+  empHeaderTitle:    { flex: 1, fontSize: 15, fontWeight: '700', color: '#fff', textAlign: 'center' },
+  groupToggle:       { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   groupToggleActive: { borderColor: '#818cf8', backgroundColor: 'rgba(88,101,242,0.15)' },
   groupToggleTxt:    { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.5)' },
-  groupBar:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: 'rgba(88,101,242,0.1)', borderBottomWidth: 1, borderBottomColor: 'rgba(88,101,242,0.2)' },
-  groupBarTxt:       { fontSize: 13, color: 'rgba(255,255,255,0.55)' },
+  groupBar:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: 'rgba(88,101,242,0.08)', borderBottomWidth: 1, borderBottomColor: 'rgba(88,101,242,0.2)' },
+  groupBarTxt:       { fontSize: 13, color: 'rgba(255,255,255,0.5)' },
   groupStartBtn:     { backgroundColor: '#5865f2', borderRadius: 9, paddingHorizontal: 16, paddingVertical: 8 },
   groupStartBtnTxt:  { fontSize: 13, fontWeight: '700', color: '#fff' },
-  searchWrap:        { flexDirection: 'row', alignItems: 'center', gap: 8, margin: 12, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 10 : 2 },
+  searchWrap:        { flexDirection: 'row', alignItems: 'center', gap: 8, margin: 12, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)', paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 10 : 4 },
   searchIcon:        { fontSize: 14 },
   searchInput:       { flex: 1, color: '#fff', fontSize: 14 },
-  empItem:           { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
+  empItem:           { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
   empInfo:           { flex: 1 },
   empName:           { fontSize: 14, fontWeight: '600', color: '#fff' },
-  empSub:            { fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 2 },
-  callBtnSm:         { width: 36, height: 36, borderRadius: 18, backgroundColor: '#2f9e44', alignItems: 'center', justifyContent: 'center' },
+  empSub:            { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 },
+  callBtnSm:         { width: 38, height: 38, borderRadius: 19, backgroundColor: '#2f9e44', alignItems: 'center', justifyContent: 'center' },
   checkbox:          { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
   checkboxChecked:   { backgroundColor: '#5865f2', borderColor: '#5865f2' },
-  emptyTxt:          { textAlign: 'center', color: 'rgba(255,255,255,0.35)', fontSize: 14, marginTop: 40 },
+  emptyTxt:          { textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 14, marginTop: 40 },
+
+  // Call
   callRoot:          { flex: 1, backgroundColor: '#050507' },
-  callHeader:        { backgroundColor: 'rgba(0,0,0,0.6)', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
+  callHeader:        { backgroundColor: 'rgba(0,0,0,0.65)', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
   callHeaderInner:   { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10 },
   callDot:           { width: 8, height: 8, borderRadius: 4, backgroundColor: '#3ba55d' },
   callHeaderTitle:   { fontSize: 14, fontWeight: '700', color: '#fff' },
-  callHeaderSub:     { fontSize: 11, color: 'rgba(255,255,255,0.45)' },
-  addBtn:            { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
-  videoTile:         { backgroundColor: '#0d0d10', overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)', alignItems: 'center', justifyContent: 'center' },
+  callHeaderSub:     { fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 1 },
+  addBtn:            { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
+
+  // Video tiles
+  videoTile:         { backgroundColor: '#0d0d12', overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)', alignItems: 'center', justifyContent: 'center' },
   videoTileSpotlit:  { borderWidth: 2, borderColor: '#5865f2' },
-  camOffFill:        { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#0d0d10' },
-  camOffText:        { fontSize: 11, color: 'rgba(255,255,255,0.45)' },
+  camOffFill:        { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#0d0d12' },
+  camOffText:        { fontSize: 11, color: 'rgba(255,255,255,0.4)' },
   tileBadges:        { position: 'absolute', top: 8, right: 8, flexDirection: 'row', gap: 6, alignItems: 'center', zIndex: 2 },
   pinBadge:          { backgroundColor: '#5865f2', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
   pinBadgeTxt:       { fontSize: 9, fontWeight: '800', color: '#fff' },
   tileRemoveBtn:     { position: 'absolute', top: 8, left: 8, zIndex: 5, width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(237,66,69,0.85)', alignItems: 'center', justifyContent: 'center' },
-  tileOverlay:       { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 8, paddingVertical: 6, backgroundColor: 'rgba(0,0,0,0.55)', flexDirection: 'row', alignItems: 'center', gap: 4, zIndex: 2 },
+  tileOverlay:       { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 8, paddingVertical: 5, backgroundColor: 'rgba(0,0,0,0.55)', flexDirection: 'row', alignItems: 'center', gap: 4, zIndex: 2 },
   tileName:          { fontSize: 11, fontWeight: '600', color: '#fff', flex: 1 },
   tileIconRed:       { width: 16, height: 16, borderRadius: 3, backgroundColor: 'rgba(237,66,69,0.8)', alignItems: 'center', justifyContent: 'center' },
-  strip:             { backgroundColor: '#0a0a0f', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)', flexShrink: 0, maxHeight: 102 },
-  stripTile:         { width: 140, height: 90, borderRadius: 6, overflow: 'hidden', backgroundColor: '#0d0d10', borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)', alignItems: 'center', justifyContent: 'center', position: 'relative' },
+
+  // Thumbnail strip
+  strip:             { backgroundColor: '#0a0a0f', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)', flexShrink: 0, maxHeight: 108 },
+  stripTile:         { width: 148, height: 88, borderRadius: 8, overflow: 'hidden', backgroundColor: '#0d0d12', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  spotlightHint:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 4, backgroundColor: 'rgba(0,0,0,0.4)' },
+  spotlightHintTxt:  { fontSize: 10, color: 'rgba(255,255,255,0.35)' },
+
+  // Audio
   audioStage:        { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#080810', paddingVertical: 24 },
   audioGrid:         { flexDirection: 'row', flexWrap: 'wrap', gap: 20, justifyContent: 'center', paddingHorizontal: 20 },
   audioCircle:       { alignItems: 'center', gap: 8, width: 100, position: 'relative' },
@@ -1671,26 +1864,33 @@ const s = StyleSheet.create({
   audioRingActive:   { borderColor: '#3ba55d', shadowColor: '#3ba55d', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 10, elevation: 6 },
   audioName:         { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.7)', textAlign: 'center', maxWidth: 90 },
   audioRemove:       { position: 'absolute', top: -4, right: -4, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(237,66,69,0.9)', alignItems: 'center', justifyContent: 'center', zIndex: 5 },
-  audioDuration:     { marginTop: 20, fontSize: 18, color: 'rgba(255,255,255,0.55)', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', letterSpacing: 1 },
-  controlsBar:       { backgroundColor: 'rgba(5,5,7,0.95)', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.07)' },
-  controls:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 14, gap: 8, flexWrap: 'wrap' },
-  ctrlWrap:          { alignItems: 'center', gap: 4 },
+  audioDuration:     { marginTop: 20, fontSize: 20, color: 'rgba(255,255,255,0.5)', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', letterSpacing: 2 },
+
+  // Controls
+  controlsBar:       { backgroundColor: 'rgba(5,5,7,0.97)', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
+  controls:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10, paddingVertical: 14, gap: 8, flexWrap: 'wrap' },
+  ctrlWrap:          { alignItems: 'center', gap: 5 },
   ctrlBtn:           { alignItems: 'center', justifyContent: 'center' },
   ctrlIcon:          { fontSize: 20, color: '#fff' },
-  ctrlLabel:         { fontSize: 9, color: 'rgba(255,255,255,0.5)', textAlign: 'center' },
-  addPanel:          { position: 'absolute', bottom: 90, left: 0, right: 0, backgroundColor: '#12121a', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingTop: 12, maxHeight: SH * 0.55, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 12 },
-  addPanelTitle:     { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.4)', letterSpacing: 0.8, textTransform: 'uppercase', paddingHorizontal: 16, marginBottom: 4 },
+  ctrlLabel:         { fontSize: 9, color: 'rgba(255,255,255,0.45)', textAlign: 'center' },
+
+  // Add panel
+  addPanel:          { position: 'absolute', bottom: 90, left: 0, right: 0, backgroundColor: '#11111a', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingTop: 12, maxHeight: SH * 0.55, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 12 },
+  addPanelTitle:     { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.35)', letterSpacing: 1, textTransform: 'uppercase', paddingHorizontal: 16, marginBottom: 4 },
   addBtnSm:          { width: 32, height: 32, borderRadius: 16, backgroundColor: '#5865f2', alignItems: 'center', justifyContent: 'center' },
-  onCallBadge:       { backgroundColor: 'rgba(59,165,93,0.15)', borderRadius: 20, borderWidth: 1, borderColor: 'rgba(59,165,93,0.35)', paddingHorizontal: 8, paddingVertical: 3 },
+  onCallBadge:       { backgroundColor: 'rgba(59,165,93,0.12)', borderRadius: 20, borderWidth: 1, borderColor: 'rgba(59,165,93,0.3)', paddingHorizontal: 8, paddingVertical: 3 },
   onCallBadgeTxt:    { fontSize: 10, fontWeight: '700', color: '#3ba55d' },
-  incomingBg:        { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', alignItems: 'center', justifyContent: 'center' },
-  incomingCard:      { backgroundColor: '#16161f', borderRadius: 28, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', padding: 32, width: SW * 0.85, alignItems: 'center', gap: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.7, shadowRadius: 24, elevation: 20 },
-  incomingLabel:     { fontSize: 13, fontWeight: '600', color: '#818cf8', marginBottom: 8 },
+
+  // Incoming call
+  incomingBg:        { flex: 1, backgroundColor: 'rgba(0,0,0,0.82)', alignItems: 'center', justifyContent: 'center' },
+  incomingCard:      { backgroundColor: '#14141e', borderRadius: 28, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)', padding: 32, width: SW * 0.85, alignItems: 'center', gap: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.7, shadowRadius: 24, elevation: 20 },
+  incomingIconRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  incomingLabel:     { fontSize: 13, fontWeight: '600', color: '#818cf8' },
   incomingName:      { fontSize: 24, fontWeight: '800', color: '#fff', textAlign: 'center' },
-  incomingHint:      { fontSize: 12, color: 'rgba(255,255,255,0.3)', marginBottom: 12 },
-  incomingActions:   { flexDirection: 'row', gap: 14, width: '100%', marginTop: 4 },
-  incomingBtn:       { flex: 1, borderRadius: 40, paddingVertical: 16, alignItems: 'center', justifyContent: 'center' },
-  acceptBtn:         { backgroundColor: '#3ba55d' },
+  incomingHint:      { fontSize: 12, color: 'rgba(255,255,255,0.3)', marginBottom: 10 },
+  incomingActions:   { flexDirection: 'row', gap: 14, width: '100%', marginTop: 6 },
+  incomingBtn:       { flex: 1, borderRadius: 40, paddingVertical: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
+  acceptBtn:         { backgroundColor: '#2f9e44' },
   declineBtn:        { backgroundColor: '#ed4245' },
   incomingBtnText:   { fontSize: 15, fontWeight: '700', color: '#fff' },
 });

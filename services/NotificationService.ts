@@ -1,21 +1,38 @@
 // services/NotificationService.ts
-import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import * as Notifications from "expo-notifications";
+import { Platform } from "react-native";
 
-export const CHANNEL_ID = 'chat_messages';
+export const CHANNEL_ID = "chat_messages";
+
+
+// ─── Foreground Notification Handler ──────────────────────────────────────────
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 // ─── In-memory store ──────────────────────────────────────────────────────────
-const roomMessageCache = new Map<string, { text: string; timestamp: number; senderName: string }[]>();
-
-
+const roomMessageCache = new Map<
+  string,
+  { text: string; timestamp: number; senderName: string }[]
+>();
 
 // ─── Create Android channel ───────────────────────────────────────────────────
 export async function createNotificationChannel() {
-  if (Platform.OS !== 'android') return;
+  if (Platform.OS !== "android") return;
+  console.log(
+    "[Push Service] Creating Android Notification Channel:",
+    CHANNEL_ID,
+  );
   await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
-    name: 'Chat Messages',
+    name: "Chat Messages",
     importance: Notifications.AndroidImportance.HIGH,
-    sound: 'default',
+    sound: "default",
     vibrationPattern: [0, 250, 250, 250],
     enableVibrate: true,
   });
@@ -23,11 +40,11 @@ export async function createNotificationChannel() {
 
 // ─── Setup iOS (no-op for now, expo handles it) ───────────────────────────────
 export async function setupIOSCategories() {
-  if (Platform.OS !== 'ios') return;
-  await Notifications.setNotificationCategoryAsync('chat', [
+  if (Platform.OS !== "ios") return;
+  await Notifications.setNotificationCategoryAsync("chat", [
     {
-      identifier: 'mark_read',
-      buttonTitle: '✅ Mark as Read',
+      identifier: "mark_read",
+      buttonTitle: "✅ Mark as Read",
       options: { isDestructive: false, isAuthenticationRequired: false },
     },
   ]);
@@ -36,15 +53,17 @@ export async function setupIOSCategories() {
 // ─── Request Permissions ──────────────────────────────────────────────────────
 export async function requestUserPermission(): Promise<boolean> {
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  console.log("[Push Service] Existing permission status:", existingStatus);
   let finalStatus = existingStatus;
 
-  if (existingStatus !== 'granted') {
+  if (existingStatus !== "granted") {
+    console.log("[Push Service] Requesting new permissions...");
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
   }
 
-  if (finalStatus !== 'granted') {
-    console.warn('[Push] Permission denied');
+  if (finalStatus !== "granted") {
+    console.warn("[Push] Permission denied");
     return false;
   }
 
@@ -67,6 +86,11 @@ export async function displayChatNotification({
   roomName?: string;
   avatarUri?: string;
 }) {
+  console.log(
+    "[Push Service] displayChatNotification called for room:",
+    roomId,
+  );
+
   const prev = roomMessageCache.get(roomId) ?? [];
   const updated = [
     ...prev,
@@ -76,14 +100,18 @@ export async function displayChatNotification({
 
   const displayTitle = roomName && roomName !== title ? roomName : title;
 
+  console.log(
+    "[Push Service] Scheduling local notification for:",
+    displayTitle,
+  );
   await Notifications.scheduleNotificationAsync({
     identifier: `room_${roomId}`,
     content: {
       title: displayTitle,
       body,
-      sound: 'default',
+      sound: "default",
       data: { roomId, messageId },
-      categoryIdentifier: 'chat',
+      categoryIdentifier: "chat",
     },
     trigger: null, // show immediately
   });
@@ -104,23 +132,32 @@ export function registerNotifeeHandlers({
   onNotificationTap: (roomId: string) => void;
 }) {
   // Foreground notification tap / action
-  const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-    const data = response.notification.request.content.data;
-    const roomId = data?.roomId as string;
-    const messageId = data?.messageId as string;
-    const actionId = response.actionIdentifier;
+  console.log("[Push Service] Registering notification response listeners");
+  const sub = Notifications.addNotificationResponseReceivedListener(
+    (response) => {
+      const data = response.notification.request.content.data;
+      const roomId = data?.roomId as string;
+      const messageId = data?.messageId as string;
+      const actionId = response.actionIdentifier;
+      console.log(
+        "[Push Service] Notification Response received. Action:",
+        actionId,
+        "Data:",
+        data,
+      );
 
-    if (!roomId) return;
+      if (!roomId) return;
 
-    if (actionId === 'mark_read') {
-      onMarkRead(roomId, messageId);
-      clearRoomNotificationCache(roomId);
-    } else {
-      // Default tap
-      onNotificationTap(roomId);
-      clearRoomNotificationCache(roomId);
-    }
-  });
+      if (actionId === "mark_read") {
+        onMarkRead(roomId, messageId);
+        clearRoomNotificationCache(roomId);
+      } else {
+        // Default tap
+        onNotificationTap(roomId);
+        clearRoomNotificationCache(roomId);
+      }
+    },
+  );
 
   return () => sub.remove();
 }

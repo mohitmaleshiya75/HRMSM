@@ -12,7 +12,7 @@ import { useUnreadMessages } from './_layout'; // Import the context hook
 const Chats = () => {
   const { data: currentUser, isLoading } = useCurrentUser();
   const { setTotalUnread } = useUnreadMessages(); // Get the setter from context
-
+  
   if (isLoading) {
     return (
       <SafeAreaProvider>
@@ -36,7 +36,7 @@ const Chats = () => {
 
   return (
     <SafeAreaProvider>
-      <ChatClient currentUser={currentUser} setTotalUnread={setTotalUnread} /> {/* Pass the setter */}
+      <ChatClient currentUser={currentUser} setTotalUnread={setTotalUnread} />
     </SafeAreaProvider>
   );
 };
