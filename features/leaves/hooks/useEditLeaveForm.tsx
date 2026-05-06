@@ -1,71 +1,51 @@
-import useCurrentUser from "@/features/auth/hooks/useCurrentUser";
-import { useEditLeaveDialog } from "./useEditLeaveDialog";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { editLeaveSchema, EditLeaveSchemaT } from "@/zod/leaveSchema";
-import { GetLeavesResponseT } from "../types";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import useCurrentUser from "@/features/auth/hooks/useCurrentUser";
 import { api, getReadableErrorMessage } from "@/lib/utils/apiUtils";
-import { toast } from "sonner";
-import useGetOfficeId from "@/hooks/useGetOfficeId";
+import { LeaveStatus } from "../type";
 
-const useEditLeaveForm = (leaveInfo: GetLeavesResponseT) => {
+type StatusT = "Approved" | "Rejected" | "Cancelled";
+
+const useUpdateLeaveStatus = () => {
   const { data: userSession } = useCurrentUser();
-  const onClose = useEditLeaveDialog((s) => s.onClose);
   const queryClient = useQueryClient();
-  const officeId = useGetOfficeId();
-  const defaultValue: EditLeaveSchemaT = {
-    employee: String(leaveInfo.employee),
-    leave_type: String(leaveInfo.leave_type),
-    status: leaveInfo.status,
-  };
-  const form = useForm<EditLeaveSchemaT>({
-    resolver: zodResolver(editLeaveSchema),
-    defaultValues: defaultValue,
-  });
 
-  const { mutate, isPending } = useMutation<
-    GetLeavesResponseT,
-    unknown,
-    EditLeaveSchemaT
-  >({
-    mutationFn: async (input) => {
+  const mutation = useMutation({
+    mutationFn: async ({
+      leaveId,
+      status,
+    }: {
+      leaveId: number;
+      status: LeaveStatus;
+    }) => {
       const { data } = await api.put(
-        `/accounts/leave-requests/${leaveInfo.id}/?office=${officeId}`,
-        input,
+        `/accounts/leave-requests/${leaveId}/?office=${userSession?.office}`,
+        { status },
         {
           headers: {
             Authorization: `Bearer ${userSession?.token}`,
           },
-        },
+        }
       );
-
       return data;
     },
-    onSuccess: () => {
+
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["leaves"] });
       queryClient.invalidateQueries({ queryKey: ["leaveBalance"] });
       queryClient.invalidateQueries({ queryKey: ["user_leaves"] });
-      toast.success(
-        `Leave request for ${leaveInfo.employee_name} has been updated from ${leaveInfo.status} to ${form.getValues().status}.`,
-      );
-      setTimeout(() => {
-        onClose();
-      }, 0);
+
+      // toast.success(`Leave ${variables.status.toLowerCase()} successfully`);
     },
+
     onError: (err) => {
-      toast.error(getReadableErrorMessage(err));
+      // toast.error(getReadableErrorMessage(err));
     },
   });
-  const onSubmit = (data: EditLeaveSchemaT) => {
-    mutate(data);
-  };
 
   return {
-    onSubmit,
-    form,
-    isPending,
+    updateStatus: mutation.mutate,
+    isPending: mutation.isPending,
   };
 };
 
-export default useEditLeaveForm;
+export default useUpdateLeaveStatus;

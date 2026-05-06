@@ -401,12 +401,15 @@ import {
     useColorScheme,
     ActivityIndicator,
     TouchableOpacity,
+    Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { GetAttendanceResponseT } from "../type";
 import { PaginatedResponse } from "@/types";
 import { convertToOnlyDate, formateTime } from "@/lib/utils/dateUtils";
 import useViewAttendance from "@/features/attendance/hooks/useViewAttendance";
+import { Stack, useRouter } from "expo-router";
+import WorkingHoursCard from "./workinghours/WorkingHours";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -1011,13 +1014,25 @@ const styles = StyleSheet.create({
     viewMoreText: { fontSize: 13, fontWeight: "700" },
 
     // ── Modal ─────────────────────────────────────────────────
-    modalOverlay: { flex: 1, justifyContent: "flex-end", height:90 },
-    modalContent: { borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: "hidden" },
+    modalOverlay: {
+        flex: 1,
+        justifyContent: "flex-end",
+        backgroundColor: "rgba(0,0,0,0.5)"
+    },
+    modalContent: {
+        height: "80%", // 👈 controls modal size
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        overflow: "hidden"
+    },
     modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", padding: 16, borderBottomWidth: 1 },
     modalTitle: { fontSize: 18, fontWeight: "700" },
     modalSub: { fontSize: 13, marginTop: 4 },
     closeBtn: { padding: 8 },
-    modalBody: { flex: 1, padding: 16, gap: 16 },
+    modalBody: {
+        flex: 1,
+        padding: 16,
+    },
     modalCloseBtn: { paddingVertical: 14, alignItems: "center", margin: 16, borderRadius: 10 },
     modalCloseBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
 
