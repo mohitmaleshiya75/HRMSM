@@ -29,14 +29,14 @@ export default function DashboardScreen() {
   const { data: AdminStats, isLoading } = useGetDashboardStats();
   const { holidays, isLoading: LoadingHolidays } = useGetHolidays();
   const [refreshing, setRefreshing] = useState(false);
-  const [presentDialogOpen, setPresentDialogOpen] = useState(false);
-  const [absentDialogOpen, setAbsentDialogOpen] = useState(false);
+  // const [presentDialogOpen, setPresentDialogOpen] = useState(false);
+  // const [absentDialogOpen, setAbsentDialogOpen] = useState(false);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 1500);
   }, []);
-  if (isLoading) {
+  if (isLoading || LoadingAnnouncements || LoadingBirthday || LoadingHolidays) {
     <DashboardSkeleton />
   }
   const attendancePercentage = Math.round(
@@ -62,14 +62,14 @@ export default function DashboardScreen() {
         value: AdminStats?.present_count || 0,
         icon: "checkmark-circle-outline",
         color: "#10b981",
-        onPress: () => setPresentDialogOpen(true),
+        // onPress: () => setPresentDialogOpen(true),
       },
       {
         title: "Absent Today",
         value: AdminStats?.absent_count || 0,
         icon: "close-circle-outline",
         color: "#10b981",
-        onPress: () => setAbsentDialogOpen(true),
+        // onPress: () => setAbsentDialogOpen(true),
       },
       {
         title: "Pending Leaves",
@@ -87,28 +87,28 @@ export default function DashboardScreen() {
     link: string;
   }> = [
       {
+        title: "Mark Attendance",
+        description: "Mark your attendance",
+        icon: "location-outline",
+        link: "/screens/Attendance",
+      },
+      {
         title: "Attendance",
-        description: "Track employee attendance",
+        description: "Track your attendance",
         icon: "calendar-outline",
-        link: "/(tabs)/Attendance",
+        link: "/screens/View Attendance",
       },
       {
         title: "Leave Requests",
         description: "Handle leave requests",
         icon: "calendar-number-outline",
-        link: "/(tabs)/Leaves",
+        link: "/screens/Leaves",
       },
       // {
       //   title: "Job Openings",
       //   description: "Manage job postings",
       //   icon: "briefcase-outline",
       // },
-      {
-        title: "My Profile",
-        description: "Manage your profile",
-        icon: "person-circle-outline",
-        link: "/(tabs)/Profile",
-      },
       // {
       //   title: "Announcements",
       //   description: "Company announcements",

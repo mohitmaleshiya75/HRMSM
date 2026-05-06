@@ -401,14 +401,12 @@ import {
     useColorScheme,
     ActivityIndicator,
     TouchableOpacity,
-    Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { GetAttendanceResponseT } from "../type";
 import { PaginatedResponse } from "@/types";
 import { convertToOnlyDate, formateTime } from "@/lib/utils/dateUtils";
 import useViewAttendance from "@/features/attendance/hooks/useViewAttendance";
-import WorkingHoursCard from "./workinghours/WorkingHours";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -454,8 +452,8 @@ const getAttendanceStatus = (record: GetAttendanceResponseT) => {
 // Main Export
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ViewAttendancePage() {
+    const router = useRouter();
     const { attendance, isLoading, totalCount } = useViewAttendance({ showAllAttendance: true });
-
     const scheme = useColorScheme();
     const isDark = scheme === "dark";
     const bg = isDark ? "#0f172a" : "#f3f4f6";
@@ -463,6 +461,7 @@ export default function ViewAttendancePage() {
     if (isLoading) {
         return (
             <View style={[styles.centered, { backgroundColor: bg }]}>
+                <Stack.Screen options={{ title: 'Attendance', headerLeft: () => (<TouchableOpacity onPress={() => router.push("/(tabs)")} style={{ paddingHorizontal: 10 }}> <Ionicons name="arrow-back" size={24} color="green" /> </TouchableOpacity>), }} />
                 <ActivityIndicator size="large" color="#10b981" />
                 <Text style={[styles.loadingText, { color: isDark ? "#9ca3af" : "#6b7280", marginTop: 12 }]}>
                     Loading attendance…
@@ -472,9 +471,12 @@ export default function ViewAttendancePage() {
     }
 
     return (
-        <AttendanceScreen
-            data={{ results: attendance, count: totalCount, next: null, previous: null }}
-        />
+        <>
+            <Stack.Screen options={{ title: 'Attendance', headerLeft: () => (<TouchableOpacity onPress={() => router.push("/(tabs)")} style={{ paddingHorizontal: 10 }}> <Ionicons name="arrow-back" size={24} color="green" /> </TouchableOpacity>), }} />
+            <AttendanceScreen
+                data={{ results: attendance, count: totalCount, next: null, previous: null }}
+            />
+        </>
     );
 }
 

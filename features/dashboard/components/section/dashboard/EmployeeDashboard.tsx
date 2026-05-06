@@ -111,20 +111,26 @@ export default function EmployeeDashboardScreen() {
   const quickActions: Array<{
     title: string;
     description: string;
-    icon: MaterialCommunityIconName;
+    icon: keyof typeof Ionicons.glyphMap;
     link: string;
   }> = [
       {
         title: "Mark Attendance",
-        description: "Check in or check out",
-        icon: "clock-outline",
-        link: "/(tabs)/Attendance"
+        description: "Mark your attendance",
+        icon: "location-outline",
+        link: "/screens/Attendance",
+      },
+      {
+        title: "Attendance",
+        description: "Track your attendance",
+        icon: "calendar-outline",
+        link: "/screens/View Attendance",
       },
       {
         title: "Leave Requests",
-        description: "Apply for time off",
-        icon: "calendar-clock-outline",
-        link: "/(tabs)/Leaves"
+        description: "Handle leave requests",
+        icon: "calendar-number-outline",
+        link: "/screens/Leaves",
       },
       // {
       //   title: "My Tasks",
@@ -136,12 +142,6 @@ export default function EmployeeDashboardScreen() {
       //   description: "View reviews and ratings",
       //   icon: "chart-box-outline",
       // },
-      {
-        title: "Profile",
-        description: "Visit your profile",
-        icon: "account",
-        link: "/(tabs)/Profile"
-      },
       // {
       //   title: "Support",
       //   description: "Contact HR support",
@@ -328,11 +328,7 @@ export default function EmployeeDashboardScreen() {
           >
             <View style={styles.actionIconContainer}>
               <View style={styles.actionIconBackground}>
-                <MaterialCommunityIcons
-                  name={action.icon}
-                  size={28}
-                  color="#10b981"
-                />
+                <Ionicons name={action.icon} size={28} color="#10b981" />
               </View>
             </View>
             <View style={styles.actionTextContainer}>

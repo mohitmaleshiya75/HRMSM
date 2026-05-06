@@ -1,3 +1,4 @@
+import React, { useMemo, useState, useRef } from "react";
 // import React, { useMemo } from "react";
 // import {
 //     View,
@@ -750,11 +751,18 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import useCurrentUser from "@/features/auth/hooks/useCurrentUser";
 import { useGetLeaves } from "../hooks/useGetLeaves";
+import { Stack, useRouter } from "expo-router";
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 type LeaveStatus = "Pending" | "Approved" | "Rejected" | "Canceled";
+type Duration = "FULL" | "HALF_AM" | "HALF_PM";
 type Duration = "FULL" | "HALF_AM" | "HALF_PM";
 
 interface LeaveItem {
@@ -792,12 +800,15 @@ const formatDate = (d: string) =>
 const getDurationLabel = (duration: Duration) => {
     switch (duration) {
         case "FULL": return "Full Day";
+        case "FULL": return "Full Day";
         case "HALF_AM": return "First Half";
         case "HALF_PM": return "Second Half";
+        default: return "N/A";
         default: return "N/A";
     }
 };
 
+const getDurationDays = (duration: Duration) => (duration === "FULL" ? 1 : 0.5);
 const getDurationDays = (duration: Duration) => (duration === "FULL" ? 1 : 0.5);
 
 const calcTotalDays = (records: LeaveItem[]) =>
@@ -808,35 +819,74 @@ const STATUS_CONFIG: Record<LeaveStatus, { color: string; icon: string; label: s
     Pending: { color: "#f59e0b", icon: "time-outline", label: "Pending" },
     Rejected: { color: "#ef4444", icon: "close-circle-outline", label: "Rejected" },
     Canceled: { color: "#6b7280", icon: "ban-outline", label: "Canceled" },
+const STATUS_CONFIG: Record<LeaveStatus, { color: string; bg: string; icon: string; label: string }> = {
+    Approved: { color: "#059669", bg: "#d1fae5", icon: "checkmark-circle", label: "Approved" },
+    Pending:  { color: "#d97706", bg: "#fef3c7", icon: "time",             label: "Pending"  },
+    Rejected: { color: "#dc2626", bg: "#fee2e2", icon: "close-circle",     label: "Rejected" },
+    Canceled: { color: "#6b7280", bg: "#f3f4f6", icon: "ban",              label: "Canceled" },
 };
+
+// Initials helper
+const getInitials = (name: string) =>
+    name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+
+// Avatar palette — deterministic by name
+const AVATAR_COLORS = ["#6366f1","#0ea5e9","#10b981","#f59e0b","#ec4899","#8b5cf6"];
+const avatarColor = (name: string) =>
+    AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Export
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ViewLeaves() {
+    const router = useRouter();
     const { leaves, isLoading, totalCount } = useGetLeaves();
     const { data: user } = useCurrentUser();
     const scheme = useColorScheme();
     const isDark = scheme === "dark";
-    const bg = isDark ? "#0f172a" : "#f3f4f6";
+    const bg = isDark ? "#0f172a" : "#f8fafc";
+
+    const header = (
+        <Stack.Screen
+            options={{
+                title: "Leave Requests",
+                headerLeft: () => (
+                    <TouchableOpacity
+                        onPress={() => router.push("/(tabs)")}
+                        style={{ paddingHorizontal: 10 }}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                        <Ionicons name="arrow-back" size={24} color={isDark ? "#fff" : "#111"} />
+                    </TouchableOpacity>
+                ),
+            }}
+        />
+    );
 
     if (isLoading) {
         return (
-            <View style={[styles.centered, { backgroundColor: bg }]}>
-                <ActivityIndicator size="large" color="#6366f1" />
-                <Text style={[styles.loadingText, { color: isDark ? "#9ca3af" : "#6b7280", marginTop: 12 }]}>
-                    Loading leaves…
-                </Text>
-            </View>
+            <>
+                {header}
+                <View style={[styles.centered, { backgroundColor: bg }]}>
+                    <ActivityIndicator size="large" color="#6366f1" />
+                    <Text style={[styles.loadingText, { color: isDark ? "#94a3b8" : "#64748b", marginTop: 14 }]}>
+                        Loading requests…
+                    </Text>
+                </View>
+            </>
         );
     }
 
     return (
-        <LeavesScreen
-            leaves={leaves ?? []}
-            totalCount={totalCount ?? 0}
-            isManager={user?.role !== "Employee"}
-        />
+        <>
+            {header}
+            <LeavesScreen
+                leaves={leaves ?? []}
+                totalCount={totalCount ?? 0}
+                isManager={user?.role !== "Employee"}
+                isDark={isDark}
+            />
+        </>
     );
 }
 
@@ -847,6 +897,7 @@ function LeavesScreen({
     leaves,
     totalCount,
     isManager,
+    isDark,
 }: {
     leaves: LeaveItem[];
     totalCount: number;
@@ -875,21 +926,17 @@ function LeavesScreen({
     // Leave type breakdown
     const leaveTypeBreakdown = useMemo(() => {
         const map: Record<string, number> = {};
-        leaves.forEach(l => {
-            map[l.leave_type_name] = (map[l.leave_type_name] ?? 0) + getDurationDays(l.duration);
-        });
+        leaves.forEach(l => { map[l.leave_type_name] = (map[l.leave_type_name] ?? 0) + getDurationDays(l.duration); });
         return Object.entries(map).sort((a, b) => b[1] - a[1]);
     }, [leaves]);
 
     // Group by employee
     const groupedData: GroupedData = useMemo(
-        () =>
-            leaves.reduce((acc, r) => {
-                if (!acc[r.employee])
-                    acc[r.employee] = { employee_name: r.employee_name, records: [] };
-                acc[r.employee].records.push(r);
-                return acc;
-            }, {} as GroupedData),
+        () => leaves.reduce((acc, r) => {
+            if (!acc[r.employee]) acc[r.employee] = { employee_name: r.employee_name, records: [] };
+            acc[r.employee].records.push(r);
+            return acc;
+        }, {} as GroupedData),
         [leaves]
     );
 
