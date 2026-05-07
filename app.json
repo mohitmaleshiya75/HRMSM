@@ -61,11 +61,8 @@
     "extra": {
       "router": {
         "unstable_useServerMiddleware": true
-      },
-      "eas": {
-        "projectId": "de8f786d-7cce-4f8a-9412-23080daac10d"
       }
     },
-    "owner": "yirica1644"
+    "owner": "hrmsm1"
   }
 }
