@@ -13,7 +13,7 @@ import React, {
 } from 'react';
 import { AppState, AppStateStatus, StyleSheet, Text, View } from 'react-native';
 // ✅ ADD this import with your other imports
-import { usePushNotifications } from '@/services/usePushNotifications';
+// import { usePushNotifications } from '@/services/usePushNotifications';
 // --- UnreadMessagesContext ---
 interface UnreadMessagesContextType {
   totalUnread: number;
@@ -111,7 +111,7 @@ function UnreadMessagesProvider({ children }: { children: React.ReactNode }) {
 // ✅ ADD this entire component before the TabLayout function
 function PushNotificationHandler() {
   const { refreshUnreadCount } = useUnreadMessages();
-  usePushNotifications(refreshUnreadCount);
+  // usePushNotifications(refreshUnreadCount);
   return null;
 }
 

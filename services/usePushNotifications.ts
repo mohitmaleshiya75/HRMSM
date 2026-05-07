@@ -13,7 +13,7 @@ import * as SecureStore from "expo-secure-store";
 import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import { makeApi } from "@/components/chat/chatAPI";
-import messaging from "@react-native-firebase/messaging";
+// import messaging from "@react-native-firebase/messaging";
 let _pushInitialized = false;
 
 export function usePushNotifications(onNewMessage?: () => void) {
@@ -36,27 +36,27 @@ export function usePushNotifications(onNewMessage?: () => void) {
   }, []);
 
   // ✅ FCM foreground listener
-const fcmUnsub = messaging().onMessage(async (remoteMessage) => {
-  console.log("[FCM] Foreground message:", remoteMessage);
+// const fcmUnsub = messaging().onMessage(async (remoteMessage) => {
+//   console.log("[FCM] Foreground message:", remoteMessage);
 
-  const data = remoteMessage.data || {};
+//   const data = remoteMessage.data || {};
 
-  const roomId    = String(data?.roomId || data?.room_id || "");
-  const messageId = String(data?.msg_id || "");
-  const title     = String(remoteMessage.notification?.title || data?.title || "New Message");
-  const body      = String(remoteMessage.notification?.body || data?.body || "");
+//   const roomId    = String(data?.roomId || data?.room_id || "");
+//   const messageId = String(data?.msg_id || "");
+//   const title     = String(remoteMessage.notification?.title || data?.title || "New Message");
+//   const body      = String(remoteMessage.notification?.body || data?.body || "");
 
-  if (roomId) {
-    await displayChatNotification({
-      title,
-      body,
-      roomId,
-      messageId,
-      roomName: "",
-      avatarUri: "",
-    });
-  }
-});
+//   if (roomId) {
+//     await displayChatNotification({
+//       title,
+//       body,
+//       roomId,
+//       messageId,
+//       roomName: "",
+//       avatarUri: "",
+//     });
+//   }
+// });
 
 
 
