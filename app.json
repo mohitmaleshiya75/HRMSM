@@ -20,7 +20,7 @@
     },
     "android": {
       "package": "com.hrmsm.app",
-      "versionCode": 10,
+      "versionCode": 12,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.jpg",
         "backgroundColor": "#ffffff"
@@ -66,6 +66,6 @@
         "projectId": "de8f786d-7cce-4f8a-9412-23080daac10d"
       }
     },
-    "owner": "hrmsm3"
+    "owner": "yirica1644"
   }
 }
