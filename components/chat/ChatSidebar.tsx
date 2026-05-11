@@ -815,7 +815,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.18)',
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 6,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
   },
@@ -824,7 +824,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.4)',
   },
   searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, color: T.white, fontSize: 14, fontWeight: '400' },
+  searchInput: { flex: 1, color: T.white, fontSize: 14, fontWeight: '400', paddingVertical: 0 },
 
   // ── Tabs
   tabs: {

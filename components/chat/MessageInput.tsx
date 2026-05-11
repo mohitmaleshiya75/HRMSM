@@ -133,13 +133,13 @@ export default function MessageInput({
           />
         </TouchableOpacity>
 
-        <TouchableOpacity
+        {/* <TouchableOpacity
           onPress={handlePickImage}
           style={styles.iconBtn}
           disabled={disabled || uploading}
         >
           <Feather name="paperclip" size={22} color={Colors.textSecondary} />
-        </TouchableOpacity>
+        </TouchableOpacity> */}
 
         <View
           style={[
@@ -187,9 +187,9 @@ export default function MessageInput({
         ) : (
           <TouchableOpacity
             style={styles.micBtn}
-            disabled={disabled || uploading}
+            disabled={disabled }
           >
-            <Feather name="mic" size={20} color={Colors.textSecondary} />
+            <Feather name="send" size={20} color={Colors.textSecondary} />
           </TouchableOpacity>
         )}
       </View>

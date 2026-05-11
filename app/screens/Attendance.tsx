@@ -133,6 +133,8 @@ export default function AttendanceScreen() {
     // ── Step config (for progress bar) ──────────────────────────
     const steps = ["Capture Face", "Get Location", "Verify & Submit"];
 
+    
+
     return (
         <>
             <Stack.Screen options={{ title: 'Mark Attendance', headerLeft: () => (<TouchableOpacity onPress={() => router.push("/(tabs)")} style={{ paddingHorizontal: 10 }}> <Ionicons name="arrow-back" size={24} color="green" /> </TouchableOpacity>), }} />
@@ -712,6 +714,7 @@ const styles = StyleSheet.create({
         paddingVertical: 15,
         borderRadius: 12,
         gap: 10,
+        marginBottom: 18,
     },
     mainButtonText: { color: "#fff", fontSize: 15, fontWeight: "700" },
     secondaryButton: {

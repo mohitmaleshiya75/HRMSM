@@ -269,15 +269,15 @@ export default function DashboardScreen() {
 
       {/* ATTENDANCE OVERVIEW */}
       <View
-        style={[
-          styles.bigCard,
-          {
-            backgroundColor: isDark ? "#1e293b" : "#fff",
-            borderColor: isDark ? "#374151" : "#e5e7eb",
-          },
-        ]}
+        // style={[
+        //   styles.bigCard,
+        //   {
+        //     backgroundColor: isDark ? "#1e293b" : "#fff",
+        //     borderColor: isDark ? "#374151" : "#e5e7eb",
+        //   },
+        // ]}
       >
-        <View style={styles.cardHeader}>
+        {/* <View style={styles.cardHeader}>
           <Ionicons
             name="bar-chart-outline"
             size={20}
@@ -292,9 +292,9 @@ export default function DashboardScreen() {
           >
             Attendance Overview
           </Text>
-        </View>
+        </View> */}
 
-        <View style={styles.progressSection}>
+        {/* <View style={styles.progressSection}>
           <View style={styles.progressBar}>
             <View style={[styles.progressFill, { width: `${attendancePercentage}%` }]} />
           </View>
@@ -306,10 +306,10 @@ export default function DashboardScreen() {
           >
             {attendancePercentage}% attendance today
           </Text>
-        </View>
+        </View> */}
 
         {/* Attendance Stats Row */}
-        <View style={styles.attendanceStatsRow}>
+        {/* <View style={styles.attendanceStatsRow}>
           <View style={styles.attendanceStat}>
             <Text style={[styles.statNumber, { color: "#10b981" }]}>{AdminStats?.present_count}</Text>
             <Text style={[styles.statSmallLabel, { color: isDark ? "#9ca3af" : "#6b7280" }]}>
@@ -323,7 +323,7 @@ export default function DashboardScreen() {
               Absent
             </Text>
           </View>
-        </View>
+        </View> */}
       </View>
 
       {/* ANNOUNCEMENTS */}

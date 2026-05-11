@@ -12,7 +12,7 @@ const useGetHolidays = () => {
   const { data, isLoading, ...rest } = useQuery({
     queryKey: ["holidays"],
     queryFn: async () => {
-      const response = await api.get<HolidayResponseT[]>(`/accounts/holidays/?office=${user?.office}`, {
+      const response = await api.get<HolidayResponseT[]>(`/accounts/holidays/upcoming_holidays/?office=${user?.office}`, {
         headers: { Authorization: `Bearer ${user?.token}` },
       });
       return response.data;

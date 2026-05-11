@@ -18,7 +18,7 @@ export const useGetLeaves = () => {
     LeavesFilters
   >({
     queryKey: "user_leaves",
-    endpoint: `/accounts/leave-requests/`,
+    endpoint: `/accounts/leave-requests/future-leaves`,
     filters,
     transformData: (response) => ({
       results: response.results || [],
