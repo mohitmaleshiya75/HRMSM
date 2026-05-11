@@ -56,26 +56,28 @@ export default function DashboardScreen() {
         value: AdminStats?.employee_count || 0,
         icon: "people-outline",
         color: "#10b981",
+        onPress: () => router.push("/screens/AllEmployees"),
       },
       {
         title: "Present Today",
         value: AdminStats?.present_count || 0,
         icon: "checkmark-circle-outline",
         color: "#10b981",
-        // onPress: () => setPresentDialogOpen(true),
+        onPress: () => router.push("/screens/PresentToday"),
       },
       {
         title: "Absent Today",
         value: AdminStats?.absent_count || 0,
         icon: "close-circle-outline",
         color: "#10b981",
-        // onPress: () => setAbsentDialogOpen(true),
+        onPress: () => router.push("/screens/AbsentToday"),
       },
       {
         title: "Pending Leaves",
         value: AdminStats?.pending_leave_requests || 0,
         icon: "document-text-outline",
         color: "#10b981",
+        onPress: () => router.push("/screens/Leaves"),
       },
     ];
 

@@ -48,7 +48,6 @@ export default function RootLayout() {
         return;
       }
 
-      // undetermined — show system dialog
       const { status: newStatus } = await Notifications.requestPermissionsAsync();
       if (newStatus !== 'granted') {
         Alert.alert(
@@ -61,28 +60,27 @@ export default function RootLayout() {
         );
       }
     }
+
     checkPermission();
   }, []);
 
   useEffect(() => {
     const checkForUpdates = async () => {
       try {
+        if (!Updates.isEnabled) return;
+
         const update = await Updates.checkForUpdateAsync();
+
         if (update.isAvailable) {
           await Updates.fetchUpdateAsync();
-          Alert.alert(
-            'Update Available',
-            'New version downloaded. Restart app?',
-            [
-              { text: 'Later' },
-              { text: 'Restart', onPress: () => Updates.reloadAsync() },
-            ]
-          );
+          await Updates.reloadAsync();
         }
       } catch (err) {
-        // OTA not supported in Expo Go — safe to ignore
+        // Safe to ignore in Expo Go / dev mode / unsupported environments.
+        console.log('OTA update check skipped:', err);
       }
     };
+
     checkForUpdates();
   }, []);
 

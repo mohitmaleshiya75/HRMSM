@@ -2,7 +2,7 @@
   "expo": {
     "name": "HRMSM",
     "slug": "HRMSM",
-    "version": "1.0.11",
+    "version": "1.0.12",
     "orientation": "portrait",
     "icon": "./assets/images/icon.jpg",
     "scheme": "hrmsm",
@@ -18,9 +18,12 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.hrmsm.app"
     },
+     "updates": {
+      "fallbackToCacheTimeout": 0
+    },
     "android": {
       "package": "com.hrmsm.app",
-      "versionCode": 14,
+      "versionCode": 15,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.jpg",
         "backgroundColor": "#ffffff"

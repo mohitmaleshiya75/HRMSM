@@ -1,8 +1,8 @@
-// import useCurrentUser from "@/features/auth/hooks/useCurrentUser";
+import useCurrentUser from "@/features/auth/hooks/useCurrentUser";
 import usePaginatedQuery from "@/hooks/usePaginatedQuery";
 import { GetPaginatedPresentAbsentResponseT, PresentAbsentFilterT } from "../type";
-import { useSearchParams } from "next/navigation";
-import useGetOfficeId from "@/hooks/useGetOfficeId";
+// import { useSearchParams } from "next/navigation";
+// import useGetOfficeId from "@/hooks/useGetOfficeId";
 
 // interface JobOpeningsResponse {
 //   results: AddEditJobOpeningResponseT[];
@@ -11,13 +11,13 @@ import useGetOfficeId from "@/hooks/useGetOfficeId";
 //   previous: string | null;
 // }
 
-const useGetJobOpenings = () => {
-  const searchParams = useSearchParams();
-  const officeId = useGetOfficeId();
-  // const { data: user } = useCurrentUser();
+const useGetPresentToday = () => {
+  // const searchParams = useSearchParams();
+  // const officeId = useGetOfficeId();
+  const { data: user } = useCurrentUser();
   const filters: PresentAbsentFilterT = {
-    search: searchParams.get("search") || undefined,
-    office:officeId,
+    // search: searchParams.get("search") || undefined,
+    office:user?.office||"0",
   };
 
   const { data, isLoading, ...rest } = usePaginatedQuery<
@@ -44,4 +44,4 @@ const useGetJobOpenings = () => {
   };
 };
 
-export default useGetJobOpenings;
+export default useGetPresentToday;

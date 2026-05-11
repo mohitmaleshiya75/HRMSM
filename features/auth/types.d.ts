@@ -1,4 +1,5 @@
-import { MaritalStatusArr, userRoleArr } from "../../../../HRMS/frontend/src/constant/index";
+import { MaritalStatusArr, userRoleArr } from "@/constant";
+
 export type RegisterResponse201 = {
   id: string;
   username: string;
