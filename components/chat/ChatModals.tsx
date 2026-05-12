@@ -2,36 +2,44 @@
 import { Feather } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
-    Modal, Platform, ScrollView,
-    StyleSheet,
-    Text, TextInput, TouchableOpacity,
-    View
+  Dimensions,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text, TextInput, TouchableOpacity,
+  View
 } from 'react-native';
 
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from './Avatar';
 import {
-    Employee,
-    Id,
-    Receipt,
-    Room,
-    empAvatar,
-    empId,
-    empInitials,
-    empName, empRole,
-    fmtTime,
-    roomIcon,
-    roomId, roomName
+  Employee,
+  Id,
+  Receipt,
+  Room,
+  empAvatar,
+  empId,
+  empInitials,
+  empName, empRole,
+  fmtTime,
+  roomIcon,
+  roomId, roomName
 } from './chatTypes';
 import { Colors } from './Colors';
 
 // ─── Base Modal ────────────────────────────────────────────────────────────────
-function BaseModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function BaseModal({ title, onClose, children, position = 'bottom' }: { title: string; onClose: () => void; children: React.ReactNode; position?: 'center' | 'bottom' }) {
+  const insets = useSafeAreaInsets();
+  const isCenter = position === 'center';
+
   return (
     <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, isCenter ? styles.centeredOverlay : styles.bottomOverlay]}>
         <TouchableOpacity style={styles.backdrop} onPress={onClose} activeOpacity={1} />
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, isCenter ? styles.middleSheet : styles.bottomSheet]}>
           <View style={styles.sheetHandle} />
           <View style={styles.sheetHeader}>
             <Text style={styles.sheetTitle}>{title}</Text>
@@ -39,7 +47,14 @@ function BaseModal({ title, onClose, children }: { title: string; onClose: () =>
             <Feather name="x" size={20} color="black" />
             </TouchableOpacity>
           </View>
-          <ScrollView style={styles.sheetContent} keyboardShouldPersistTaps="handled">
+          <ScrollView 
+            style={styles.sheetContent} 
+            contentContainerStyle={[
+              styles.sheetContent,
+              { paddingBottom: isCenter ? 24 : Math.max(insets.bottom + 10, 24) }
+            ]}
+            keyboardShouldPersistTaps="handled"
+          >
             {children}
           </ScrollView>
         </View>
@@ -59,6 +74,7 @@ interface AddParticipantsModalProps {
 }
 
 export function AddParticipantsModal({ visible, employees, meId, existingIds, onClose, onAdd }: AddParticipantsModalProps) {
+  const insets = useSafeAreaInsets();
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(new Set<string>());
   if (!visible) return null;
@@ -118,6 +134,7 @@ interface ForwardModalProps {
 }
 
 export function ForwardModal({ visible, rooms, currentRoomId, meId, onClose, onForward }: ForwardModalProps) {
+  const insets = useSafeAreaInsets();
   const [sel, setSel] = useState(new Set<string>());
   if (!visible) return null;
 
@@ -188,7 +205,7 @@ export function ReceiptsModal({ visible, receipts, onClose }: ReceiptsModalProps
   );
 }
 
-// ─── Edit History ─────────────────────────────────────────────────────────────
+// ─── Edit History ─────────────────────────────────────
 interface HistoryModalProps {
   visible: boolean;
   history: { id?: Id; old_content?: string; edited_at?: string; edited_by?: Employee }[];
@@ -224,6 +241,7 @@ interface CreateGroupModalProps {
 }
 
 export function CreateGroupModal({ visible, employees, meId, onClose, onSubmit }: CreateGroupModalProps) {
+  const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
   const [q, setQ] = useState('');
@@ -242,7 +260,7 @@ export function CreateGroupModal({ visible, employees, meId, onClose, onSubmit }
   };
 
   return (
-    <BaseModal title="Create Group" onClose={onClose}>
+    <BaseModal title="Create Group" onClose={onClose} position="center">
       <TextInput
         value={name}
         onChangeText={setName}
@@ -289,10 +307,21 @@ export function CreateGroupModal({ visible, employees, meId, onClose, onSubmit }
   );
 }
 
+
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: Colors.overlay },
+  overlay: { flex: 1, backgroundColor: Colors.overlay },
+  bottomOverlay: { justifyContent: 'flex-end' },
+  centeredOverlay: { justifyContent: 'center', alignItems: 'center' },
   backdrop: { flex: 1 },
-  sheet: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '90%', minHeight: 300 },
+  sheet: { backgroundColor: Colors.white, maxHeight: '90%', minHeight: 300 },
+  bottomSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  middleSheet: {
+    borderRadius: 24,
+    marginVertical: 20,
+    width: SCREEN_WIDTH * 0.9,
+    maxHeight: SCREEN_HEIGHT - 40,
+    minHeight: SCREEN_HEIGHT * 0.5,
+  },
   sheetHandle: { width: 40, height: 4, backgroundColor: Colors.border, borderRadius: 2, alignSelf: 'center', marginTop: 10 },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: Colors.border },
   sheetTitle: { fontSize: 16, fontWeight: '700', color: Colors.text },
@@ -306,7 +335,7 @@ const styles = StyleSheet.create({
   empInfo: { flex: 1, minWidth: 0 },
   empName: { fontSize: 14, fontWeight: '600', color: Colors.text },
   empRole: { fontSize: 12, color: Colors.textSecondary },
-  submitBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14, marginTop: 20 , marginBottom: Platform.OS === 'ios' ? 0 : 20 },
+  submitBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14, marginTop: 20 },
   submitBtnDisabled: { opacity: 0.4 },
   forwardBtn: { backgroundColor: Colors.primary },
   submitBtnText: { color: Colors.white, fontSize: 15, fontWeight: '700' },
