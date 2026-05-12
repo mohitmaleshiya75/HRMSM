@@ -1,4 +1,3 @@
-
 let mediaDevices: any;
 let RTCView: any;
 let _PC: any, _SDP: any, _ICE: any, _MS: any;
@@ -57,7 +56,6 @@ try {
   console.error('[Calls:BOOT] react-native-incall-manager FAILED:', e?.message);
 }
 
-// Expo notifications for push (background/killed app incoming calls)
 let Notifications: any = null;
 try {
   Notifications = require('expo-notifications');
@@ -108,7 +106,10 @@ type MetadataMessage =
   | { type: 'mute';         value: boolean }
   | { type: 'videoOff';     value: boolean }
   | { type: 'screenShare';  value: boolean }
-  | { type: 'newPeer';      peer: GroupPeerInfo; existingPeers: GroupPeerInfo[] }
+  // FIX: newPeer now carries the full current roster so every recipient can
+  //      connect to everyone they don't know yet (not just the new joiner).
+  | { type: 'newPeer';      peer: GroupPeerInfo; allPeers: GroupPeerInfo[] }
+  | { type: 'peerList';     peers: GroupPeerInfo[] }
   | { type: 'peerLeft';     peerId: string }
   | { type: 'hostTransfer'; newHostPeerId: string }
   | { type: 'kick';         peerId: string }
@@ -119,6 +120,7 @@ interface CallMetadata {
   fromName?: string;
   fromUserId?: number;
   isGroup?: boolean;
+  // Full peer list known at call-time so the callee can mesh-connect to everyone
   existingPeers?: GroupPeerInfo[];
   initiatorPeerId?: string;
 }
@@ -167,7 +169,6 @@ async function registerForPushNotifications(): Promise<string | null> {
       finalStatus = status;
     }
     if (finalStatus !== 'granted') return null;
-    // For production: use getExpoPushTokenAsync({ projectId: 'your-project-id' })
     const token = await Notifications.getDevicePushTokenAsync().catch(() => null);
     return token?.data ?? null;
   } catch (e: any) {
@@ -189,7 +190,7 @@ async function showIncomingCallNotification(callerName: string, mode: CallMode) 
         categoryIdentifier: 'incoming_call',
         data: { type: 'incoming_call', callerName, mode },
       },
-      trigger: null, // immediate
+      trigger: null,
     });
   } catch (e: any) {
     console.warn('[Calls:PUSH] showIncomingCallNotification failed:', e?.message);
@@ -198,9 +199,7 @@ async function showIncomingCallNotification(callerName: string, mode: CallMode) 
 
 async function dismissCallNotification() {
   if (!Notifications) return;
-  try {
-    await Notifications.dismissAllNotificationsAsync();
-  } catch {}
+  try { await Notifications.dismissAllNotificationsAsync(); } catch {}
 }
 
 // ─── Error Boundary ───────────────────────────────────────────────────────────
@@ -273,9 +272,9 @@ function CtrlBtn({
   onPress: () => void;
   active?: boolean; danger?: boolean; large?: boolean; disabled?: boolean;
 }) {
-  const bg = danger ? '#ed4245' : active ? 'rgba(88,101,242,0.35)' : 'rgba(255,255,255,0.12)';
-  const sz = large ? 58 : 48;
-  const iconSize = large ? 24 : 20;
+  const bg        = danger ? '#ed4245' : active ? 'rgba(88,101,242,0.35)' : 'rgba(255,255,255,0.12)';
+  const sz        = large ? 58 : 48;
+  const iconSize  = large ? 24 : 20;
   const iconColor = danger ? '#fff' : active ? '#818cf8' : '#fff';
   return (
     <TouchableOpacity style={s.ctrlWrap} onPress={onPress} disabled={disabled} activeOpacity={0.75}>
@@ -343,7 +342,7 @@ function IncomingCallModal({ incoming, onAccept, onDecline }: {
   );
 }
 
-// ─── Video tile (tap = spotlight) ────────────────────────────────────────────
+// ─── Video tile ───────────────────────────────────────────────────────────────
 function VideoTile({
   stream, name, isLocal, videoOff, muted, netQuality,
   isSpotlit, isSharing, onPress, onRemove, amInitiator, frontCamera,
@@ -375,13 +374,10 @@ function VideoTile({
           <Text style={s.camOffText}>{!stream ? 'Connecting…' : 'Camera off'}</Text>
         </View>
       )}
-
       <View style={s.tileBadges}>
         <NetBadge quality={netQuality} />
         {isSpotlit && (
-          <View style={s.pinBadge}>
-            <Text style={s.pinBadgeTxt}>PIN</Text>
-          </View>
+          <View style={s.pinBadge}><Text style={s.pinBadgeTxt}>PIN</Text></View>
         )}
         {isSharing && (
           <View style={[s.pinBadge, { backgroundColor: '#5865f2' }]}>
@@ -389,17 +385,15 @@ function VideoTile({
           </View>
         )}
       </View>
-
       {!isLocal && amInitiator && onRemove && (
         <TouchableOpacity style={s.tileRemoveBtn} onPress={onRemove}>
           <Ionicons name="close" size={12} color="#fff" />
         </TouchableOpacity>
       )}
-
       <View style={s.tileOverlay}>
         <Text style={s.tileName} numberOfLines={1}>{isLocal ? 'You' : name}</Text>
         <View style={{ flexDirection: 'row', gap: 4 }}>
-          {muted    && <View style={s.tileIconRed}><Ionicons name="mic-off" size={9} color="#fff" /></View>}
+          {muted    && <View style={s.tileIconRed}><Ionicons name="mic-off"      size={9} color="#fff" /></View>}
           {videoOff && <View style={s.tileIconRed}><Ionicons name="videocam-off" size={9} color="#fff" /></View>}
         </View>
       </View>
@@ -433,9 +427,9 @@ function AudioCircle({
 //  Main Calls Component
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Calls() {
-  if (!RTCView) return <UnavailableScreen reason="RTCView is null (react-native-webrtc not loaded)" />;
-  if (!mediaDevices) return <UnavailableScreen reason="mediaDevices is null" />;
-  if (!Peer) return <UnavailableScreen reason="Peer is null (peerjs failed to load)" />;
+  if (!RTCView)       return <UnavailableScreen reason="RTCView is null (react-native-webrtc not loaded)" />;
+  if (!mediaDevices)  return <UnavailableScreen reason="mediaDevices is null" />;
+  if (!Peer)          return <UnavailableScreen reason="Peer is null (peerjs failed to load)" />;
   return (
     <CallsErrorBoundary>
       <CallsInner />
@@ -456,6 +450,14 @@ function CallsInner() {
 
   const myId     = String((currentUser as Record<string, unknown> | undefined)?.id ?? '');
   const myPeerId = `u-${myId}`;
+
+  // Keep a stable ref so callbacks never capture a stale value
+  const myPeerIdRef = useRef(myPeerId);
+  const myNameRef   = useRef(myName);
+  const myIdRef     = useRef(myId);
+  useEffect(() => { myPeerIdRef.current = myPeerId; }, [myPeerId]);
+  useEffect(() => { myNameRef.current   = myName;   }, [myName]);
+  useEffect(() => { myIdRef.current     = myId;     }, [myId]);
 
   const callPeople = useMemo(
     () => allEmployees.filter(e => String(e.id) !== myId),
@@ -500,10 +502,13 @@ function CallsInner() {
   const callModeRef        = useRef<CallMode>('audio');
   const inCallRef          = useRef(false);
   const initiatorPeerIdRef = useRef<string | null>(null);
-  // FIX: track whether we're in the middle of accepting to prevent race conditions
   const acceptingRef       = useRef(false);
   const resetCallStateRef  = useRef<() => void>(() => {});
-  const setupMediaConnRef  = useRef<(c: MediaConnection, pid: string, uid: number, name: string, out: boolean) => void>(() => {});
+  // FIX: use a ref for setupMediaConnection and connectMissingGroupPeers so
+  //      the peer.on('call') listener always calls the latest version without
+  //      needing to re-register the listener on every render.
+  const setupMediaConnRef       = useRef<(c: MediaConnection, pid: string, uid: number, name: string, out: boolean) => void>(() => {});
+  const connectMissingPeersRef  = useRef<(peers: GroupPeerInfo[], initiator?: string | null) => void>(() => {});
 
   useEffect(() => { micMutedRef.current        = micMuted;        }, [micMuted]);
   useEffect(() => { cameraOffRef.current       = cameraOff;       }, [cameraOff]);
@@ -548,26 +553,30 @@ function CallsInner() {
         const errType = err?.type ?? 'unknown';
         console.error('[Calls:PEER] Peer error type:', errType, '|', err?.message);
 
-        // FIX: peer-unavailable means target not online — handle gracefully
         if (errType === 'peer-unavailable') {
-          const msg = err?.message ?? '';
-          const match = msg.match(/peer (u-\d+)/i);
-          const failedPid = match?.[1];
+          // FIX: PeerJS formats the message as "Could not connect to peer <id>"
+          const msg      = err?.message ?? '';
+          const match    = msg.match(/peer\s+(u-[\w-]+)/i);
+          const failedPid = match?.[1] ?? null;
           console.warn('[Calls:PEER] peer-unavailable for:', failedPid);
-          if (failedPid && activeConnsRef.current.has(failedPid)) {
-            // Clean up the failed connection without full reset
-            ringVibration.stop();
-            setStatus(`${failedPid.replace('u-', 'User ')} is not available`);
-            // Only reset if this is the only participant
-            if (participantsRef.current.size <= 1) {
-              resetCallStateRef.current();
+
+          ringVibration.stop();
+          if (failedPid) {
+            // Remove the pending slot so the UI doesn't show a stuck "Connecting…" tile
+            if (participantsRef.current.has(failedPid)) {
+              participantsRef.current.delete(failedPid);
+              activeConnsRef.current.delete(failedPid);
+              setParticipants(Array.from(participantsRef.current.values()));
             }
-          } else if (!inCallRef.current) {
-            ringVibration.stop();
+            setStatus(`${failedPid.replace('u-', 'User ')} is not available`);
+          } else {
             setStatus('User is not available right now');
+          }
+          // Only tear down if we have nobody else
+          if (participantsRef.current.size === 0 && !inCallRef.current) {
             resetCallStateRef.current();
           }
-          return; // don't set peerReady=false for this error type
+          return;
         }
 
         setPeerReady(false);
@@ -607,26 +616,20 @@ function CallsInner() {
   const getMedia = useCallback(async (mode: CallMode): Promise<any> => {
     console.log('[Calls:MEDIA] getMedia() mode:', mode);
 
-    // FIX: return existing stream if already acquired for same mode
     if (localStreamRef.current) {
       const existingVideo = localStreamRef.current.getVideoTracks().length > 0;
-      const needVideo = mode === 'video';
+      const needVideo     = mode === 'video';
       if (existingVideo === needVideo) {
         console.log('[Calls:MEDIA] Reusing existing stream');
         return localStreamRef.current;
       }
-      // Stop old stream before getting new one
       localStreamRef.current.getTracks().forEach((t: any) => t.stop());
       localStreamRef.current = null;
       setLocalStream(null);
     }
 
     const constraints: Record<string, unknown> = {
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: noiseSup,
-        autoGainControl: true,
-      },
+      audio: { echoCancellation: true, noiseSuppression: noiseSup, autoGainControl: true },
       video: mode === 'video'
         ? { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, facingMode: 'user' }
         : false,
@@ -639,11 +642,11 @@ function CallsInner() {
           return mediaDevices.getUserMedia({ audio: true, video: mode === 'video' });
         });
 
-      console.log('[Calls:MEDIA] Stream obtained. Audio:', stream.getAudioTracks().length, 'Video:', stream.getVideoTracks().length);
+      console.log('[Calls:MEDIA] Stream obtained. Audio:', stream.getAudioTracks().length,
+        'Video:', stream.getVideoTracks().length);
       localStreamRef.current = stream;
       setLocalStream(stream);
 
-      // Apply current mute/video state
       stream.getAudioTracks().forEach((t: any) => { t.enabled = !micMutedRef.current; });
       if (mode === 'video') {
         stream.getVideoTracks().forEach((t: any) => { t.enabled = !cameraOffRef.current; });
@@ -664,8 +667,62 @@ function CallsInner() {
     });
   }, []);
 
-  useEffect(() => { if (inCall) broadcastToAll({ type: 'mute', value: micMuted }); }, [micMuted, inCall, broadcastToAll]);
+  useEffect(() => { if (inCall) broadcastToAll({ type: 'mute',     value: micMuted });  }, [micMuted,  inCall, broadcastToAll]);
   useEffect(() => { if (inCall && callMode === 'video') broadcastToAll({ type: 'videoOff', value: cameraOff }); }, [cameraOff, inCall, callMode, broadcastToAll]);
+
+  // FIX: getCurrentGroupPeers now reads from refs so it always returns the live
+  //      roster even inside stale closures.
+  const getCurrentGroupPeers = useCallback((): GroupPeerInfo[] => {
+    const peers: GroupPeerInfo[] = [];
+    if (myIdRef.current) {
+      peers.push({ peerId: myPeerIdRef.current, userId: Number(myIdRef.current), name: myNameRef.current });
+    }
+    participantsRef.current.forEach(p => {
+      peers.push({ peerId: p.id, userId: p.userId, name: p.name });
+    });
+    return peers;
+  }, []); // no deps — reads only from refs
+
+  // FIX: connectMissingGroupPeers is now stored in a ref so the peer.on('call')
+  //      listener always calls the latest version.
+  const connectMissingGroupPeers = useCallback((
+    peers: GroupPeerInfo[],
+    callInitiator?: string | null,
+  ) => {
+    const p      = peerRef.current;
+    const stream = localStreamRef.current;
+    if (!p || !stream) {
+      console.warn('[Calls:MESH] connectMissingGroupPeers: no peer or no stream yet');
+      return;
+    }
+
+    // De-duplicate the supplied list, skip self and already-connected peers
+    const seen = new Set<string>();
+    peers.forEach(peerInfo => {
+      if (!peerInfo.peerId || peerInfo.peerId === myPeerIdRef.current) return;
+      if (seen.has(peerInfo.peerId)) return;
+      seen.add(peerInfo.peerId);
+
+      if (activeConnsRef.current.has(peerInfo.peerId)) return; // already wired up
+
+      console.log('[Calls:MESH] Connecting to missing peer:', peerInfo.peerId);
+      const conn = p.call(peerInfo.peerId, stream, {
+        metadata: {
+          mode:            callModeRef.current,
+          fromName:        myNameRef.current,
+          fromUserId:      Number(myIdRef.current),
+          isGroup:         true,
+          // Tell the callee about everyone we know so they can mesh too
+          existingPeers:   getCurrentGroupPeers().filter(ep => ep.peerId !== peerInfo.peerId),
+          initiatorPeerId: callInitiator ?? initiatorPeerIdRef.current ?? myPeerIdRef.current,
+        } as CallMetadata,
+      });
+      setupMediaConnRef.current(conn, peerInfo.peerId, peerInfo.userId, peerInfo.name, true);
+    });
+  }, [getCurrentGroupPeers]); // stable — only refs inside
+
+  // Keep the ref fresh
+  useEffect(() => { connectMissingPeersRef.current = connectMissingGroupPeers; }, [connectMissingGroupPeers]);
 
   // ── Cleanup participant ───────────────────────────────────────────────────
   const cleanupParticipant = useCallback((pid: string, wasDeclined: boolean) => {
@@ -680,29 +737,39 @@ function CallsInner() {
       resetCallStateRef.current();
       setStatus(wasDeclined ? 'Call declined' : 'Call ended');
     } else if (initiatorPeerIdRef.current === pid) {
-      const remaining = Array.from(participantsRef.current.values());
-      const newHost = remaining[0];
-      if (newHost) {
-        setInitiatorPeerId(newHost.id);
-        initiatorPeerIdRef.current = newHost.id;
-        if (newHost.id === myPeerId) broadcastToAll({ type: 'hostTransfer', newHostPeerId: myPeerId });
+      // FIX: host transfer — pick first remaining participant, prefer self
+      const remaining  = Array.from(participantsRef.current.values());
+      const selfIsNext = true; // we are always "remaining" from our own perspective
+      const newHostId  = selfIsNext ? myPeerIdRef.current : remaining[0]?.id;
+      if (newHostId) {
+        setInitiatorPeerId(newHostId);
+        initiatorPeerIdRef.current = newHostId;
+        // Inform others if we became the new host
+        if (newHostId === myPeerIdRef.current) {
+          broadcastToAll({ type: 'hostTransfer', newHostPeerId: myPeerIdRef.current });
+        }
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myPeerId, broadcastToAll]);
+  }, [broadcastToAll]);
 
   // ── Setup data connection ─────────────────────────────────────────────────
   const setupDataConnection = useCallback((dataConn: DataConnection, pid: string) => {
     dataConn.on('open', () => {
       if (!dataConn.open) return;
+      // FIX: send full peer roster immediately on data channel open so the
+      //      remote side can mesh-connect to everyone it hasn't met yet.
       try {
         dataConn.send({ type: 'mute',     value: micMutedRef.current  } as MetadataMessage);
         dataConn.send({ type: 'videoOff', value: cameraOffRef.current } as MetadataMessage);
-      } catch {}
+        dataConn.send({ type: 'peerList', peers: getCurrentGroupPeers() } as MetadataMessage);
+      } catch (e: any) {
+        console.warn('[Calls:DATA] Failed to send initial state to:', pid, e?.message);
+      }
     });
 
     dataConn.on('data', (data: unknown) => {
       const msg = data as MetadataMessage;
+
       if (msg.type === 'decline') {
         ringVibration.stop();
         const wasDeclined = !streamReceivedRef.current.has(pid);
@@ -710,30 +777,34 @@ function CallsInner() {
         cleanupParticipant(pid, wasDeclined);
         return;
       }
+
       if (msg.type === 'peerLeft') {
         if (participantsRef.current.has(msg.peerId)) cleanupParticipant(msg.peerId, false);
         return;
       }
+
       if (msg.type === 'hostTransfer') {
         setInitiatorPeerId(msg.newHostPeerId);
         initiatorPeerIdRef.current = msg.newHostPeerId;
         return;
       }
+
       if (msg.type === 'kick') {
         const { peerId: kickedPid } = msg;
-        if (kickedPid === myPeerId) {
+        if (kickedPid === myPeerIdRef.current) {
           resetCallStateRef.current();
           setStatus('You were removed from the call');
         } else if (participantsRef.current.has(kickedPid)) {
           const kicked = participantsRef.current.get(kickedPid);
           if (kicked) {
-            try { kicked.connection.close(); } catch {}
+            try { kicked.connection.close(); }     catch {}
             try { kicked.dataConnection?.close(); } catch {}
           }
           cleanupParticipant(kickedPid, false);
         }
         return;
       }
+
       if (msg.type === 'mute' || msg.type === 'videoOff' || msg.type === 'screenShare') {
         setParticipants(prev => prev.map(p => {
           if (p.id !== pid) return p;
@@ -741,35 +812,35 @@ function CallsInner() {
           if (msg.type === 'videoOff')    return { ...p, videoOff: msg.value };
           if (msg.type === 'screenShare') {
             if (msg.value) setSpotlightId(pid);
-            else setSpotlightId(prev => prev === pid ? null : prev);
+            else           setSpotlightId(prev => prev === pid ? null : prev);
             return { ...p, isScreenSharing: msg.value };
           }
           return p;
         }));
+        return;
       }
+
+      // FIX: newPeer now carries the full allPeers list — connect to anyone missing
       if (msg.type === 'newPeer') {
-        const { peer: np } = msg;
-        const p = peerRef.current;
-        if (np.peerId !== myPeerId && !activeConnsRef.current.has(np.peerId) && p && localStreamRef.current) {
-          const conn = p.call(np.peerId, localStreamRef.current, {
-            metadata: {
-              mode: callModeRef.current, fromName: myName, fromUserId: Number(myId),
-              isGroup: true, existingPeers: [], initiatorPeerId: initiatorPeerIdRef.current ?? myPeerId,
-            } as CallMetadata,
-          });
-          setupMediaConnRef.current(conn, np.peerId, np.userId, np.name, true);
-        }
+        connectMissingPeersRef.current(msg.allPeers, initiatorPeerIdRef.current);
+        return;
+      }
+
+      if (msg.type === 'peerList') {
+        // FIX: use the ref so we always call the latest implementation
+        connectMissingPeersRef.current(msg.peers, initiatorPeerIdRef.current);
       }
     });
 
     dataConn.on('close', () => {
-      setParticipants(prev => prev.map(p => p.id === pid ? { ...p, dataConnection: undefined } : p));
+      setParticipants(prev => prev.map(p =>
+        p.id === pid ? { ...p, dataConnection: undefined } : p,
+      ));
     });
     dataConn.on('error', (e: any) => {
       console.error('[Calls:DATA] Error for:', pid, e?.message);
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myPeerId, myName, myId, cleanupParticipant]);
+  }, [cleanupParticipant, getCurrentGroupPeers]);
 
   // ── Reset call state ──────────────────────────────────────────────────────
   const resetCallState = useCallback(() => {
@@ -778,6 +849,7 @@ function CallsInner() {
     ringVibration.stop();
     dismissCallNotification();
     setInCall(false);
+    inCallRef.current = false;
     localStreamRef.current?.getTracks().forEach((t: any) => t.stop());
     localStreamRef.current = null;
     setLocalStream(null);
@@ -795,6 +867,7 @@ function CallsInner() {
     setStatus('Ready');
     setIncoming(null);
     setInitiatorPeerId(null);
+    initiatorPeerIdRef.current = null;
     setAddSearch('');
     setAddPanelOpen(false);
     try { InCallManager?.stop(); InCallManager?.setKeepScreenOn(false); } catch {}
@@ -807,9 +880,10 @@ function CallsInner() {
   const setupMediaConnection = useCallback((
     conn: MediaConnection, pid: string, userId: number, name: string, isOutgoing: boolean,
   ) => {
-    console.log('[Calls:CONN] setupMediaConnection. pid:', pid, '| name:', name, '| outgoing:', isOutgoing);
+    console.log('[Calls:CONN] setupMediaConnection pid:', pid, '| name:', name, '| outgoing:', isOutgoing);
+
     if (activeConnsRef.current.has(pid)) {
-      console.warn('[Calls:CONN] Already connected to:', pid);
+      console.warn('[Calls:CONN] Already connected to:', pid, '— skipping duplicate');
       return;
     }
     activeConnsRef.current.set(pid, conn);
@@ -821,6 +895,9 @@ function CallsInner() {
     participantsRef.current.set(pid, participant);
     setParticipants(Array.from(participantsRef.current.values()));
 
+    // FIX: both sides open a data channel — outgoing side calls peer.connect(),
+    //      incoming side is handled by the peer.on('connection') listener.
+    //      This ensures the data channel exists regardless of who called whom.
     if (peerRef.current && isOutgoing) {
       try {
         const dataConn = peerRef.current.connect(pid, { reliable: true });
@@ -838,15 +915,22 @@ function CallsInner() {
         '| audio:', remoteStream.getAudioTracks().length,
         '| video:', remoteStream.getVideoTracks().length);
       streamReceivedRef.current.add(pid);
-      const p = participantsRef.current.get(pid);
-      if (p) {
-        p.stream = remoteStream;
-        participantsRef.current.set(pid, p);
+      const existing = participantsRef.current.get(pid);
+      if (existing) {
+        existing.stream = remoteStream;
+        participantsRef.current.set(pid, existing);
         setParticipants(Array.from(participantsRef.current.values()));
       }
       setStatus('Connected');
-      ringVibration.stop(); // FIX: stop ring the moment stream arrives
+      ringVibration.stop();
       if (!timerRef.current) startTimer();
+
+      // FIX: After stream arrives, broadcast our full peer list to the new
+      //      participant via the data channel so they can catch up on everyone.
+      const dc = participantsRef.current.get(pid)?.dataConnection;
+      if (dc?.open) {
+        try { dc.send({ type: 'peerList', peers: getCurrentGroupPeers() } as MetadataMessage); } catch {}
+      }
     });
 
     conn.on('close', () => {
@@ -860,7 +944,7 @@ function CallsInner() {
       console.error('[Calls:CONN] Error:', pid, err?.message);
       cleanupParticipant(pid, false);
     });
-  }, [setupDataConnection, cleanupParticipant, startTimer]);
+  }, [setupDataConnection, cleanupParticipant, startTimer, getCurrentGroupPeers]);
 
   useEffect(() => { setupMediaConnRef.current = setupMediaConnection; }, [setupMediaConnection]);
 
@@ -888,105 +972,84 @@ function CallsInner() {
   useEffect(() => {
     if (!peer) return;
     const onDataConn = (dataConn: DataConnection) => {
-      const existing = participantsRef.current.get(dataConn.peer);
-      if (existing && !existing.dataConnection) {
-        existing.dataConnection = dataConn;
-        participantsRef.current.set(existing.id, existing);
-        setParticipants(Array.from(participantsRef.current.values()));
-        setupDataConnection(dataConn, existing.id);
+      const pid      = dataConn.peer;
+      const existing = participantsRef.current.get(pid);
+
+      if (existing) {
+        // FIX: always attach the data connection even if we already have a
+        //      media connection for this peer (the outgoing side may not have
+        //      opened a data channel yet for the incoming direction).
+        if (!existing.dataConnection || !existing.dataConnection.open) {
+          existing.dataConnection = dataConn;
+          participantsRef.current.set(pid, existing);
+          setParticipants(Array.from(participantsRef.current.values()));
+          setupDataConnection(dataConn, pid);
+        }
         return;
       }
-      dataConn.on('data', (data: unknown) => {
-        const msg = data as MetadataMessage;
-        const pid = dataConn.peer;
-        if (msg.type === 'decline') {
-          const wasDeclined = !streamReceivedRef.current.has(pid);
-          if (wasDeclined) setStatus('Call declined');
-          cleanupParticipant(pid, wasDeclined);
-          return;
-        }
-        if (msg.type === 'peerLeft') {
-          if (participantsRef.current.has(msg.peerId)) cleanupParticipant(msg.peerId, false);
-          return;
-        }
-        if (msg.type === 'hostTransfer') {
-          setInitiatorPeerId(msg.newHostPeerId);
-          initiatorPeerIdRef.current = msg.newHostPeerId;
-          return;
-        }
-        if (msg.type === 'kick') {
-          const { peerId: kickedPid } = msg;
-          if (kickedPid === myPeerId) {
-            resetCallStateRef.current();
-            setStatus('You were removed from the call');
-          } else if (participantsRef.current.has(kickedPid)) {
-            const kicked = participantsRef.current.get(kickedPid);
-            if (kicked) {
-              try { kicked.connection.close(); } catch {}
-              try { kicked.dataConnection?.close(); } catch {}
-            }
-            cleanupParticipant(kickedPid, false);
-          }
-          return;
-        }
-        if (msg.type === 'newPeer') {
-          const { peer: np } = msg;
-          if (np.peerId !== myPeerId && !activeConnsRef.current.has(np.peerId) && peerRef.current && localStreamRef.current) {
-            const conn = peerRef.current.call(np.peerId, localStreamRef.current, {
-              metadata: {
-                mode: callModeRef.current, fromName: myName, fromUserId: Number(myId),
-                isGroup: true, existingPeers: [], initiatorPeerId: initiatorPeerIdRef.current ?? myPeerId,
-              } as CallMetadata,
-            });
-            setupMediaConnRef.current(conn, np.peerId, np.userId, np.name, true);
-          }
-        }
-      });
+
+      // Unknown peer opened a data channel (e.g. for decline signalling)
+      setupDataConnection(dataConn, pid);
     };
     peer.on('connection', onDataConn);
     return () => { peer.off('connection', onDataConn); };
-  }, [peer, setupDataConnection, myPeerId, myName, myId, cleanupParticipant]);
+  }, [peer, setupDataConnection]);
 
   // ── Incoming MEDIA call listener ──────────────────────────────────────────
+  // FIX: This effect now only depends on `peer` — all callbacks go through refs
+  //      so the listener is never torn down and re-registered mid-call, which
+  //      was causing race conditions and missed mesh connections.
   useEffect(() => {
     if (!peer) return;
+
     const onCall = (call: MediaConnection) => {
       const meta           = (call.metadata ?? {}) as CallMetadata;
       const mode: CallMode = meta.mode === 'video' ? 'video' : 'audio';
-      const name           = meta.fromName || call.peer;
+      const name           = meta.fromName  || call.peer;
       const userId         = meta.fromUserId ?? 0;
       const callInitiator  = meta.initiatorPeerId ?? call.peer;
 
-      console.log('[Calls:INCOMING] From:', call.peer, '| name:', name, '| mode:', mode);
+      console.log('[Calls:INCOMING] From:', call.peer, '| name:', name,
+        '| mode:', mode, '| isGroup:', meta.isGroup,
+        '| existingPeers:', meta.existingPeers?.length ?? 0);
 
-      // Group call: auto-answer if already in call
-      if (localStreamRef.current && meta.isGroup) {
+      // ── Auto-answer if we're already in a call (group mesh) ──────────────
+      if (localStreamRef.current && inCallRef.current && meta.isGroup) {
+        console.log('[Calls:INCOMING] Auto-answering group peer:', call.peer);
+
         if (!initiatorPeerIdRef.current) {
           setInitiatorPeerId(callInitiator);
           initiatorPeerIdRef.current = callInitiator;
         }
         call.answer(localStreamRef.current);
         setupMediaConnRef.current(call, call.peer, userId, name, false);
-        if (meta.existingPeers && peerRef.current) {
-          meta.existingPeers.forEach(({ peerId: ep, userId: eu, name: en }) => {
-            if (ep !== myPeerId && !activeConnsRef.current.has(ep)) {
-              const nc = peerRef.current!.call(ep, localStreamRef.current!, {
-                metadata: {
-                  mode: callModeRef.current, fromName: myName, fromUserId: Number(myId),
-                  isGroup: true, existingPeers: [], initiatorPeerId: callInitiator,
-                } as CallMetadata,
-              });
-              setupMediaConnRef.current(nc, ep, eu, en, true);
-            }
-          });
+
+        // FIX: connect to all other peers in the call that we haven't met
+        if (meta.existingPeers && meta.existingPeers.length > 0) {
+          // Slight delay so our own participant entry is registered first
+          setTimeout(() => {
+            connectMissingPeersRef.current(meta.existingPeers!, callInitiator);
+          }, 200);
         }
         return;
       }
 
-      // Show incoming call UI
+      // ── Show incoming call UI (not yet in a call) ─────────────────────────
+      // FIX: if we're already in a call but it's NOT marked isGroup, still
+      //      auto-answer rather than showing a confusing second incoming modal.
+      if (localStreamRef.current && inCallRef.current) {
+        call.answer(localStreamRef.current);
+        setupMediaConnRef.current(call, call.peer, userId, name, false);
+        if (meta.existingPeers) {
+          setTimeout(() => {
+            connectMissingPeersRef.current(meta.existingPeers!, callInitiator);
+          }, 200);
+        }
+        return;
+      }
+
       setIncoming({ name, userId, mode, conn: call });
       ringVibration.start();
-      // FIX: also show system notification for when app is backgrounded
       showIncomingCallNotification(name, mode);
 
       call.on('close', () => {
@@ -1001,15 +1064,14 @@ function CallsInner() {
         dismissCallNotification();
       });
     };
+
     peer.on('call', onCall);
     return () => { peer.off('call', onCall); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [peer, myPeerId, myName, myId]);
+  }, [peer]); // FIX: only re-register when the Peer object itself changes
 
   // ── Accept / Decline ──────────────────────────────────────────────────────
   const acceptIncoming = useCallback(async () => {
     if (!incoming || acceptingRef.current) return;
-    // FIX: set accepting flag BEFORE stopping ring and doing async work
     acceptingRef.current = true;
     ringVibration.stop();
     dismissCallNotification();
@@ -1018,14 +1080,12 @@ function CallsInner() {
     const meta          = (conn.metadata ?? {}) as CallMetadata;
     const callInitiator = meta.initiatorPeerId ?? conn.peer;
 
-    // Clear incoming BEFORE async getUserMedia to prevent AppState race
     setIncoming(null);
 
     try {
       console.log('[Calls:ACCEPT] Getting media for mode:', mode);
       const stream = await getMedia(mode);
 
-      // FIX: After async getUserMedia, verify peer is still valid and we haven't been reset
       if (!peerRef.current) {
         console.error('[Calls:ACCEPT] Peer is null after getUserMedia — aborting');
         stream.getTracks().forEach((t: any) => t.stop());
@@ -1038,27 +1098,25 @@ function CallsInner() {
 
       if (!inCallRef.current) {
         setInCall(true);
+        inCallRef.current = true;
         setCallMode(mode);
+        callModeRef.current = mode;
         setInitiatorPeerId(callInitiator);
         initiatorPeerIdRef.current = callInitiator;
         setView('call');
         try { InCallManager?.start({ media: mode }); InCallManager?.setKeepScreenOn(true); } catch {}
       }
+
       setupMediaConnRef.current(conn, conn.peer, userId, name, false);
 
-      if (meta.existingPeers && peerRef.current) {
-        meta.existingPeers.forEach(({ peerId: ep, userId: eu, name: en }) => {
-          if (ep !== myPeerId && !activeConnsRef.current.has(ep)) {
-            const nc = peerRef.current!.call(ep, stream, {
-              metadata: {
-                mode, fromName: myName, fromUserId: Number(myId),
-                isGroup: true, existingPeers: [], initiatorPeerId: callInitiator,
-              } as CallMetadata,
-            });
-            setupMediaConnRef.current(nc, ep, eu, en, true);
-          }
-        });
+      // FIX: connect to all existing peers AFTER the stream is confirmed set
+      //      by passing it through getMedia and storing in localStreamRef.
+      if (meta.existingPeers && meta.existingPeers.length > 0) {
+        setTimeout(() => {
+          connectMissingPeersRef.current(meta.existingPeers!, callInitiator);
+        }, 300);
       }
+
       acceptingRef.current = false;
     } catch (e: any) {
       console.error('[Calls:ACCEPT] Failed:', e?.message);
@@ -1066,7 +1124,7 @@ function CallsInner() {
       acceptingRef.current = false;
       resetCallState();
     }
-  }, [incoming, getMedia, myPeerId, myName, myId, resetCallState]);
+  }, [incoming, getMedia, resetCallState]);
 
   const declineIncoming = useCallback(() => {
     if (!incoming) return;
@@ -1117,7 +1175,7 @@ function CallsInner() {
     setNoiseSup(next);
     if (!inCall || !localStreamRef.current) return;
     try {
-      const ns = await mediaDevices.getUserMedia({
+      const ns  = await mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: next, autoGainControl: true },
       });
       const [nt] = ns.getAudioTracks();
@@ -1139,7 +1197,8 @@ function CallsInner() {
 
   const endCall = useCallback(() => {
     console.log('[Calls:END] endCall()');
-    broadcastToAll({ type: 'peerLeft', peerId: myPeerId });
+    broadcastToAll({ type: 'peerLeft', peerId: myPeerIdRef.current });
+    // Notify any pending (ringing) peers that we've hung up
     activeConnsRef.current.forEach((conn, pid) => {
       if (!streamReceivedRef.current.has(pid) && peerRef.current) {
         try {
@@ -1155,17 +1214,18 @@ function CallsInner() {
     resetCallState();
     setStatus('Call ended');
     setView('home');
-  }, [broadcastToAll, myPeerId, resetCallState]);
+  }, [broadcastToAll, resetCallState]);
 
   const removeParticipant = useCallback((pid: string) => {
+    // Tell everyone (including the kicked peer) before tearing down
     broadcastToAll({ type: 'kick', peerId: pid });
     const p = participantsRef.current.get(pid);
     if (p?.dataConnection?.open) {
       try { p.dataConnection.send({ type: 'kick', peerId: pid } as MetadataMessage); } catch {}
     }
     if (p) {
-      try { p.connection.close(); } catch {}
-      try { p.dataConnection?.close(); } catch {}
+      try { p.connection.close();       } catch {}
+      try { p.dataConnection?.close();  } catch {}
     }
     activeConnsRef.current.delete(pid);
     participantsRef.current.delete(pid);
@@ -1181,13 +1241,13 @@ function CallsInner() {
       return;
     }
     const targetPeerId = `u-${emp.id}`;
-    if (targetPeerId === myPeerId) { setStatus("Can't call yourself"); return; }
+    if (targetPeerId === myPeerIdRef.current) { setStatus("Can't call yourself"); return; }
+
     try {
       setStatus(`Calling ${emp.full_name}…`);
       ringVibration.start();
       const stream = await getMedia(callMode);
 
-      // FIX: check peer still valid after async
       if (!peerRef.current) {
         stream.getTracks().forEach((t: any) => t.stop());
         ringVibration.stop();
@@ -1195,16 +1255,21 @@ function CallsInner() {
         return;
       }
 
-      setInitiatorPeerId(myPeerId);
-      initiatorPeerIdRef.current = myPeerId;
-      const conn = peerRef.current.call(targetPeerId, stream, {
-        metadata: {
-          mode: callMode, fromName: myName, fromUserId: Number(myId), initiatorPeerId: myPeerId,
-        } as CallMetadata,
-      });
+      setInitiatorPeerId(myPeerIdRef.current);
+      initiatorPeerIdRef.current = myPeerIdRef.current;
       setInCall(true);
+      inCallRef.current = true;
       setView('call');
       try { InCallManager?.start({ media: callMode }); InCallManager?.setKeepScreenOn(true); } catch {}
+
+      const conn = peerRef.current.call(targetPeerId, stream, {
+        metadata: {
+          mode:            callMode,
+          fromName:        myNameRef.current,
+          fromUserId:      Number(myIdRef.current),
+          initiatorPeerId: myPeerIdRef.current,
+        } as CallMetadata,
+      });
       setupMediaConnection(conn, targetPeerId, emp.id, emp.full_name, true);
     } catch (e: any) {
       console.error('[Calls:CALL] Failed:', e?.message);
@@ -1212,7 +1277,7 @@ function CallsInner() {
       setStatus('Permission denied — allow mic/camera and retry');
       resetCallState();
     }
-  }, [peerReady, callMode, myPeerId, myName, myId, getMedia, setupMediaConnection, resetCallState]);
+  }, [peerReady, callMode, getMedia, setupMediaConnection, resetCallState]);
 
   const startGroupCall = useCallback(async () => {
     if (!peerRef.current || !peerReady || selectedIds.size === 0) return;
@@ -1221,23 +1286,41 @@ function CallsInner() {
       ringVibration.start();
       const stream  = await getMedia(callMode);
       const targets = callPeople.filter(e => selectedIds.has(e.id));
-      setInitiatorPeerId(myPeerId);
-      initiatorPeerIdRef.current = myPeerId;
+
+      if (!peerRef.current) {
+        stream.getTracks().forEach((t: any) => t.stop());
+        ringVibration.stop();
+        setStatus('Connection lost');
+        return;
+      }
+
+      setInitiatorPeerId(myPeerIdRef.current);
+      initiatorPeerIdRef.current = myPeerIdRef.current;
       setInCall(true);
+      inCallRef.current = true;
       setView('call');
       setGroupMode(false);
       setSelectedIds(new Set());
       try { InCallManager?.start({ media: callMode }); InCallManager?.setKeepScreenOn(true); } catch {}
+
+      // FIX: build the full existingPeers list (self + ALL other targets) so
+      //      each invitee knows about every other person in the call.
+      const allTargetPeers: GroupPeerInfo[] = [
+        { peerId: myPeerIdRef.current, userId: Number(myIdRef.current), name: myNameRef.current },
+        ...targets.map(t => ({ peerId: `u-${t.id}`, userId: t.id, name: t.full_name })),
+      ];
+
       for (const emp of targets) {
         const tpid = `u-${emp.id}`;
-        const existingPeers: GroupPeerInfo[] = [
-          { peerId: myPeerId, userId: Number(myId), name: myName },
-          ...targets.filter(t => t.id !== emp.id).map(t => ({ peerId: `u-${t.id}`, userId: t.id, name: t.full_name })),
-        ];
         const conn = peerRef.current!.call(tpid, stream, {
           metadata: {
-            mode: callMode, fromName: myName, fromUserId: Number(myId),
-            isGroup: true, existingPeers, initiatorPeerId: myPeerId,
+            mode:            callMode,
+            fromName:        myNameRef.current,
+            fromUserId:      Number(myIdRef.current),
+            isGroup:         true,
+            // Send everyone so callee can mesh-connect to all of them
+            existingPeers:   allTargetPeers.filter(p => p.peerId !== tpid),
+            initiatorPeerId: myPeerIdRef.current,
           } as CallMetadata,
         });
         setupMediaConnection(conn, tpid, emp.id, emp.full_name, true);
@@ -1248,25 +1331,36 @@ function CallsInner() {
       setStatus('Permission denied');
       resetCallState();
     }
-  }, [peerReady, selectedIds, callMode, callPeople, myPeerId, myId, myName, getMedia, setupMediaConnection, resetCallState]);
+  }, [peerReady, selectedIds, callMode, callPeople, getMedia, setupMediaConnection, resetCallState]);
 
   const addToCall = useCallback(async (emp: Employee) => {
     if (!peerRef.current || !localStreamRef.current) return;
     const tpid = `u-${emp.id}`;
     if (activeConnsRef.current.has(tpid)) return;
-    const existingPeers: GroupPeerInfo[] = [
-      { peerId: myPeerId, userId: Number(myId), name: myName },
-      ...Array.from(participantsRef.current.values()).map(p => ({ peerId: p.id, userId: p.userId, name: p.name })),
-    ];
+
+    // FIX: existingPeers = self + all current participants (not including new joiner)
+    const existingPeers: GroupPeerInfo[] = getCurrentGroupPeers();
+
     const conn = peerRef.current.call(tpid, localStreamRef.current, {
       metadata: {
-        mode: callMode, fromName: myName, fromUserId: Number(myId),
-        isGroup: true, existingPeers, initiatorPeerId: initiatorPeerIdRef.current ?? myPeerId,
+        mode:            callModeRef.current,
+        fromName:        myNameRef.current,
+        fromUserId:      Number(myIdRef.current),
+        isGroup:         true,
+        existingPeers,   // new joiner learns about everyone
+        initiatorPeerId: initiatorPeerIdRef.current ?? myPeerIdRef.current,
       } as CallMetadata,
     });
-    setupMediaConnection(conn, tpid, emp.id, emp.full_name, true);
-    broadcastToAll({ type: 'newPeer', peer: { peerId: tpid, userId: emp.id, name: emp.full_name }, existingPeers });
-  }, [callMode, myPeerId, myId, myName, setupMediaConnection, broadcastToAll]);
+    setupMediaConnRef.current(conn, tpid, emp.id, emp.full_name, true);
+
+    // FIX: tell every existing participant about the new joiner AND the full
+    //      roster (allPeers) so they can connect to the new person too.
+    const allPeers: GroupPeerInfo[] = [
+      ...existingPeers,
+      { peerId: tpid, userId: emp.id, name: emp.full_name },
+    ];
+    broadcastToAll({ type: 'newPeer', peer: { peerId: tpid, userId: emp.id, name: emp.full_name }, allPeers });
+  }, [getCurrentGroupPeers, broadcastToAll]);
 
   // ── Android back handler ──────────────────────────────────────────────────
   useEffect(() => {
@@ -1274,7 +1368,7 @@ function CallsInner() {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (view === 'call') {
         Alert.alert('Leave call?', 'Do you want to end the call?', [
-          { text: 'Stay', style: 'cancel' },
+          { text: 'Stay',  style: 'cancel' },
           { text: 'Leave', style: 'destructive', onPress: endCall },
         ]);
         return true;
@@ -1285,24 +1379,20 @@ function CallsInner() {
     return () => sub.remove();
   }, [view, endCall]);
 
-  // FIX: removed AppState background auto-decline — it was killing calls when
-  // the screen locked during getUserMedia (async). Notifications handle background.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
       console.log('[Calls:APP] AppState:', state);
-      // No auto-decline on background
     });
     return () => sub.remove();
   }, []);
 
-  // ── Notification tap handler (open app to call screen) ───────────────────
+  // ── Notification tap handler ──────────────────────────────────────────────
   useEffect(() => {
     if (!Notifications) return;
     const sub = Notifications.addNotificationResponseReceivedListener((response: any) => {
       const data = response.notification.request.content.data;
       if (data?.type === 'incoming_call') {
-        console.log('[Calls:PUSH] Notification tapped — incoming call from:', data.callerName);
-        // The live incoming call modal will show if the peer connection is still open
+        console.log('[Calls:PUSH] Notification tapped — caller:', data.callerName);
       }
     });
     return () => sub.remove();
@@ -1335,12 +1425,12 @@ function CallsInner() {
     [participants],
   );
 
-  // ── Grid layout (FIX: proper spotlight handling) ──────────────────────────
+  // ── Grid layout ───────────────────────────────────────────────────────────
   const totalTiles = participants.length + 1;
   const gridCols   = totalTiles <= 1 ? 1 : totalTiles <= 4 ? 2 : 3;
   const tileW      = SW / gridCols;
   const tileH      = tileW * (9 / 16);
-  const gridHeight  = Math.ceil(totalTiles / gridCols) * tileH;
+  const gridHeight = Math.ceil(totalTiles / gridCols) * tileH;
 
   const spotlitParticipant = spotlightId && spotlightId !== 'me'
     ? participants.find(p => p.id === spotlightId) ?? null
@@ -1523,7 +1613,6 @@ function CallsInner() {
       <View style={{ flex: 1 }}>
         {callMode === 'video' ? (
           spotlightId ? (
-            // FIX: Spotlight view — large main + thumbnail strip
             <View style={{ flex: 1 }}>
               <View style={{ flex: 1 }}>
                 {spotlitIsLocal ? (
@@ -1589,16 +1678,13 @@ function CallsInner() {
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-              {/* Hint */}
               <View style={s.spotlightHint}>
                 <Ionicons name="information-circle-outline" size={12} color="rgba(255,255,255,0.4)" />
                 <Text style={s.spotlightHintTxt}>Tap main video to exit spotlight</Text>
               </View>
             </View>
           ) : (
-            // Grid view — tap any tile to spotlight
             <ScrollView contentContainerStyle={{ minHeight: Math.max(gridHeight, SH * 0.52) }}>
-              {/* Hint shown when multiple participants */}
               {totalTiles > 1 && (
                 <View style={s.spotlightHint}>
                   <Ionicons name="expand-outline" size={12} color="rgba(255,255,255,0.4)" />
@@ -1679,11 +1765,7 @@ function CallsInner() {
             />
           )}
           {callMode === 'video' && (
-            <CtrlBtn
-              label="Flip"
-              iconName="camera-reverse"
-              onPress={flipCamera}
-            />
+            <CtrlBtn label="Flip" iconName="camera-reverse" onPress={flipCamera} />
           )}
           <CtrlBtn
             label={speakerOn ? 'Earpiece' : 'Speaker'}
@@ -1704,7 +1786,7 @@ function CallsInner() {
             large
             onPress={() => {
               Alert.alert('End call', 'Are you sure you want to end the call?', [
-                { text: 'Cancel', style: 'cancel' },
+                { text: 'Cancel',   style: 'cancel' },
                 { text: 'End Call', style: 'destructive', onPress: endCall },
               ]);
             }}
@@ -1732,7 +1814,7 @@ function CallsInner() {
             style={{ maxHeight: 220 }}
             ListEmptyComponent={<Text style={[s.emptyTxt, { padding: 12 }]}>No people found</Text>}
             renderItem={({ item: emp }) => {
-              const epid    = `u-${emp.id}`;
+              const epid     = `u-${emp.id}`;
               const isOnCall = activeConnPids.has(epid);
               return (
                 <View style={[s.empItem, { paddingVertical: 7 }]}>
@@ -1784,7 +1866,6 @@ const s = StyleSheet.create({
   avatar:            { alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   avatarTxt:         { color: '#fff', fontWeight: '700', letterSpacing: 0.5 },
 
-  // Home
   homeRoot:          { flex: 1, backgroundColor: '#080810', paddingHorizontal: 20, paddingTop: 20 },
   homeTitle:         { fontSize: 30, fontWeight: '800', color: '#fff', marginTop: 16, letterSpacing: -0.5 },
   homeSubtitle:      { fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 28, marginTop: 4 },
@@ -1803,8 +1884,7 @@ const s = StyleSheet.create({
   statusBanner:      { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, backgroundColor: 'rgba(88,101,242,0.1)', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(88,101,242,0.2)' },
   statusBannerTxt:   { fontSize: 12, color: 'rgba(255,255,255,0.55)', flex: 1 },
 
-  // Employees
-  empRoot:           { flex: 1, backgroundColor: '#080810',paddingTop:25 },
+  empRoot:           { flex: 1, backgroundColor: '#080810', paddingTop: 25 },
   empHeader:         { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)', gap: 8 },
   empBack:           { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 4 },
   empBackTxt:        { fontSize: 15, color: '#818cf8', fontWeight: '600' },
@@ -1828,7 +1908,6 @@ const s = StyleSheet.create({
   checkboxChecked:   { backgroundColor: '#5865f2', borderColor: '#5865f2' },
   emptyTxt:          { textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 14, marginTop: 40 },
 
-  // Call
   callRoot:          { flex: 1, backgroundColor: '#050507' },
   callHeader:        { backgroundColor: 'rgba(0,0,0,0.65)', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
   callHeaderInner:   { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10 },
@@ -1837,7 +1916,6 @@ const s = StyleSheet.create({
   callHeaderSub:     { fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 1 },
   addBtn:            { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
 
-  // Video tiles
   videoTile:         { backgroundColor: '#0d0d12', overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)', alignItems: 'center', justifyContent: 'center' },
   videoTileSpotlit:  { borderWidth: 2, borderColor: '#5865f2' },
   camOffFill:        { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#0d0d12' },
@@ -1850,13 +1928,11 @@ const s = StyleSheet.create({
   tileName:          { fontSize: 11, fontWeight: '600', color: '#fff', flex: 1 },
   tileIconRed:       { width: 16, height: 16, borderRadius: 3, backgroundColor: 'rgba(237,66,69,0.8)', alignItems: 'center', justifyContent: 'center' },
 
-  // Thumbnail strip
   strip:             { backgroundColor: '#0a0a0f', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)', flexShrink: 0, maxHeight: 108 },
   stripTile:         { width: 148, height: 88, borderRadius: 8, overflow: 'hidden', backgroundColor: '#0d0d12', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   spotlightHint:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 4, backgroundColor: 'rgba(0,0,0,0.4)' },
   spotlightHintTxt:  { fontSize: 10, color: 'rgba(255,255,255,0.35)' },
 
-  // Audio
   audioStage:        { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#080810', paddingVertical: 24 },
   audioGrid:         { flexDirection: 'row', flexWrap: 'wrap', gap: 20, justifyContent: 'center', paddingHorizontal: 20 },
   audioCircle:       { alignItems: 'center', gap: 8, width: 100, position: 'relative' },
@@ -1866,7 +1942,6 @@ const s = StyleSheet.create({
   audioRemove:       { position: 'absolute', top: -4, right: -4, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(237,66,69,0.9)', alignItems: 'center', justifyContent: 'center', zIndex: 5 },
   audioDuration:     { marginTop: 20, fontSize: 20, color: 'rgba(255,255,255,0.5)', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', letterSpacing: 2 },
 
-  // Controls
   controlsBar:       { backgroundColor: 'rgba(5,5,7,0.97)', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
   controls:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10, paddingVertical: 14, gap: 8, flexWrap: 'wrap' },
   ctrlWrap:          { alignItems: 'center', gap: 5 },
@@ -1874,14 +1949,12 @@ const s = StyleSheet.create({
   ctrlIcon:          { fontSize: 20, color: '#fff' },
   ctrlLabel:         { fontSize: 9, color: 'rgba(255,255,255,0.45)', textAlign: 'center' },
 
-  // Add panel
   addPanel:          { position: 'absolute', bottom: 90, left: 0, right: 0, backgroundColor: '#11111a', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingTop: 12, maxHeight: SH * 0.55, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 12 },
   addPanelTitle:     { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.35)', letterSpacing: 1, textTransform: 'uppercase', paddingHorizontal: 16, marginBottom: 4 },
   addBtnSm:          { width: 32, height: 32, borderRadius: 16, backgroundColor: '#5865f2', alignItems: 'center', justifyContent: 'center' },
   onCallBadge:       { backgroundColor: 'rgba(59,165,93,0.12)', borderRadius: 20, borderWidth: 1, borderColor: 'rgba(59,165,93,0.3)', paddingHorizontal: 8, paddingVertical: 3 },
   onCallBadgeTxt:    { fontSize: 10, fontWeight: '700', color: '#3ba55d' },
 
-  // Incoming call
   incomingBg:        { flex: 1, backgroundColor: 'rgba(0,0,0,0.82)', alignItems: 'center', justifyContent: 'center' },
   incomingCard:      { backgroundColor: '#14141e', borderRadius: 28, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)', padding: 32, width: SW * 0.85, alignItems: 'center', gap: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.7, shadowRadius: 24, elevation: 20 },
   incomingIconRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
