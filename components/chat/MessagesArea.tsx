@@ -489,7 +489,7 @@ function DateSeparator({ date }: { date: string }) {
 
 function EmptyMessages({ isSearch }: { isSearch: boolean }) {
   return (
-    <View style={styles.center}>
+    <View style={[styles.center, { transform: [{ rotate: '180deg' }] }]}>
       <View style={styles.emptyIconWrap}>
         <Feather
           name={isSearch ? 'search' : 'message-circle'}
@@ -525,6 +525,7 @@ const styles = StyleSheet.create({
   center: {
     flex: 1,
     alignItems: 'center',
+    width: '100%',
     justifyContent: 'center',
     padding: 32,
     minHeight: 200,
@@ -601,6 +602,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: T.fg,
     marginBottom: 6,
+    textAlign: 'center',
     letterSpacing: -0.2,
   },
   emptySubtext: {

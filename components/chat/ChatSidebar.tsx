@@ -717,11 +717,11 @@ export default function ChatSidebar({
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
         <Animated.View
           style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}>
           {interior}
         </Animated.View>
+        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
       </View>
     </Modal>
   );

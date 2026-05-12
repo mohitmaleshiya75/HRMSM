@@ -1,22 +1,21 @@
-import React, { useCallback, useState } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  Dimensions,
-  RefreshControl,
-  useColorScheme,
-  Image,
-} from "react-native";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import useGetDashboardStats from "@/features/dashboard/hooks/useGetDashboardStats";
-import DashboardSkeleton from "../skelaton/DashboardSkelaton";
-import { useRouter } from "expo-router";
 import useGetActiveAnnouncements from "@/features/announcements/hooks/useGetActiveAnnouncements";
 import useGetBirthday from "@/features/birthdays/hooks/useGetBirthdays";
+import useGetDashboardStats from "@/features/dashboard/hooks/useGetDashboardStats";
 import useGetHolidays from "@/features/holidays/hooks/useGetHolidays";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import React, { useCallback, useState } from "react";
+import {
+  Image,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useColorScheme,
+  View
+} from "react-native";
+import DashboardSkeleton from "../skelaton/DashboardSkelaton";
 
 // const { width } = Dimensions.get("window");
 
@@ -37,7 +36,7 @@ export default function DashboardScreen() {
     setTimeout(() => setRefreshing(false), 1500);
   }, []);
   if (isLoading || LoadingAnnouncements || LoadingBirthday || LoadingHolidays) {
-    <DashboardSkeleton />
+    return <DashboardSkeleton />;
   }
   const attendancePercentage = Math.round(
     ((AdminStats?.present_count || 0) / (AdminStats?.employee_count || 1)) * 100
@@ -191,7 +190,11 @@ export default function DashboardScreen() {
               },
             ]}
           >
-            <View style={styles.statContent}>
+          <View style={styles.statContent}>
+            <View style={styles.statLeftSection}> 
+              <View style={[styles.iconCircle, { backgroundColor: item.color }]}>
+                <Ionicons name={item.icon} size={24} color="#fff" />
+              </View>
               <View>
                 <Text
                   style={[
@@ -210,10 +213,14 @@ export default function DashboardScreen() {
                   {item.value}
                 </Text>
               </View>
-              <View style={[styles.iconCircle, { backgroundColor: item.color }]}>
-                <Ionicons name={item.icon} size={26} color="#fff" />
-              </View>
             </View>
+            {/* Chevron icon to indicate clickability */}
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={isDark ? "#4b5563" : "#cbd5e1"}
+            />
+          </View>
           </TouchableOpacity>
         ))}
       </View>
@@ -675,6 +682,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
+  statLeftSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
   eventsList: {
     gap: 0,
   },
@@ -762,11 +775,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
   },
 
   featureIconContainer: {
